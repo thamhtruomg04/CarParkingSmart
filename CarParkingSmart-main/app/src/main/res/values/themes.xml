@@ -1,0 +1,12 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Base.Theme.CarParkingSmart" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">#4285F4</item>
+        <item name="colorPrimaryVariant">#3367D6</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <style name="Theme.CarParkingSmart" parent="Base.Theme.CarParkingSmart" />
+</resources>

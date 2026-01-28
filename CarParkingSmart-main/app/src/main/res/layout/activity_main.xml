@@ -1,0 +1,630 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#E5E5E5">
+
+    <!-- Bản đồ -->
+    <org.osmdroid.views.MapView
+        android:id="@+id/map"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Thanh tìm kiếm phía trên -->
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="12dp"
+        app:cardCornerRadius="28dp"
+        app:cardElevation="4dp"
+        android:backgroundTint="#FFFFFF">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="4dp"
+            android:gravity="center_vertical">
+
+            <!-- Logo Google Maps -->
+            <ImageView
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="8dp"
+                android:src="@drawable/ic_maps_logo"
+                android:contentDescription="Maps Logo" />
+
+            <AutoCompleteTextView
+                android:id="@+id/search_box"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:hint="Tìm kiếm ở đây"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:importantForAutofill="no"
+                android:background="@null"
+                android:textSize="16sp"
+                android:textColor="#202124"
+                android:textColorHint="#70757A"
+                android:singleLine="true"
+                android:paddingStart="4dp"
+                android:paddingEnd="8dp"
+                android:dropDownHeight="300dp"
+                android:completionThreshold="2" />
+
+            <!-- Icon microphone -->
+            <ImageButton
+                android:id="@+id/btn_voice"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Voice search"
+                android:src="@android:drawable/ic_btn_speak_now"
+                app:tint="#5F6368" />
+
+            <!-- Avatar -->
+            <ImageView
+                android:id="@+id/user_avatar"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="8dp"
+                android:src="@android:drawable/ic_menu_myplaces"
+                android:contentDescription="User Avatar"
+                android:background="@drawable/circle_button" />
+
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Các chip category ngang -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="76dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingEnd="12dp">
+
+            <!-- Nhà hàng -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/chip_restaurant"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="2dp"
+                android:backgroundTint="#FFFFFF">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@android:drawable/ic_dialog_info"
+                        app:tint="#5F6368" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Nhà hàng"
+                        android:textSize="14sp"
+                        android:textColor="#202124"
+                        android:layout_marginStart="6dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Quán cà phê -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/chip_cafe"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="2dp"
+                android:backgroundTint="#FFFFFF">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@android:drawable/ic_dialog_info"
+                        app:tint="#5F6368" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Quán cà phê"
+                        android:textSize="14sp"
+                        android:textColor="#202124"
+                        android:layout_marginStart="6dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Khách sạn -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/chip_hotel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="2dp"
+                android:backgroundTint="#FFFFFF">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@android:drawable/ic_dialog_info"
+                        app:tint="#5F6368" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Khách sạn"
+                        android:textSize="14sp"
+                        android:textColor="#202124"
+                        android:layout_marginStart="6dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Bệnh viện -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/chip_hospital"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="2dp"
+                android:backgroundTint="#FFFFFF">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@android:drawable/ic_dialog_info"
+                        app:tint="#5F6368" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Bệnh viện"
+                        android:textSize="14sp"
+                        android:textColor="#202124"
+                        android:layout_marginStart="6dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <!-- Các nút chức năng bên phải (góc dưới phải) -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end|bottom"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="160dp"
+        android:orientation="vertical">
+
+        <!-- Nút Layers -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_marginBottom="12dp"
+            app:cardCornerRadius="28dp"
+            app:cardElevation="6dp"
+            android:backgroundTint="#FFFFFF">
+
+            <ImageButton
+                android:id="@+id/btn_layers"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Layers"
+                android:src="@android:drawable/ic_dialog_map"
+                app:tint="#5F6368" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Nút mở danh sách bãi gần nhất -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_marginBottom="12dp"
+            app:cardCornerRadius="28dp"
+            app:cardElevation="6dp"
+            android:backgroundTint="#FFFFFF">
+
+            <Button
+                android:id="@+id/btn_show_parking_list"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:text="List"
+                android:textSize="12sp"
+                android:textColor="#1A73E8"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:drawableTop="@android:drawable/ic_menu_view"
+                android:drawableTint="#1A73E8"
+                android:gravity="center" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Nút My Location -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_marginBottom="12dp"
+            app:cardCornerRadius="28dp"
+            app:cardElevation="6dp"
+            android:backgroundTint="#FFFFFF">
+
+            <ImageButton
+                android:id="@+id/btn_my_location"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Vị trí của tôi"
+                android:src="@android:drawable/ic_menu_mylocation"
+                app:tint="#1A73E8" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Nút mới: Lưu vị trí xe -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_marginBottom="12dp"
+            app:cardCornerRadius="28dp"
+            app:cardElevation="6dp"
+            android:backgroundTint="#FFFFFF">
+
+            <Button
+                android:id="@+id/btn_save_my_spot"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:text="Lưu xe"
+                android:textSize="12sp"
+                android:textColor="#1A73E8"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:drawableTop="@android:drawable/ic_menu_save"
+                android:drawableTint="#1A73E8"
+                android:gravity="center" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Nút mới: Tìm xe của tôi (ban đầu ẩn) -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            app:cardCornerRadius="28dp"
+            app:cardElevation="6dp"
+            android:backgroundTint="#FFFFFF">
+
+            <Button
+                android:id="@+id/btn_find_my_spot"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:text="Tìm xe"
+                android:textSize="12sp"
+                android:textColor="#1A73E8"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:drawableTop="@android:drawable/ic_menu_directions"
+                android:drawableTint="#1A73E8"
+                android:gravity="center"
+                android:visibility="gone" />
+        </com.google.android.material.card.MaterialCardView>
+
+    </LinearLayout>
+
+    <!-- Nút Directions (FAB ở dưới trái) -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/btn_directions"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_margin="16dp"
+        android:contentDescription="Chỉ đường"
+        android:src="@android:drawable/ic_menu_directions"
+        app:tint="#FFFFFF"
+        app:backgroundTint="#1A73E8"
+        app:elevation="6dp"
+        app:borderWidth="0dp" />
+
+    <!-- Bottom Sheet - Thông tin địa điểm -->
+    <LinearLayout
+        android:id="@+id/bottom_sheet"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bottom_sheet_bg"
+        android:orientation="vertical"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="20dp"
+        app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
+
+        <Button
+            android:id="@+id/btn_book_parking"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="ĐẶT TRƯỚC CHỖ NÀY"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#4CAF50"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginTop="8dp"
+            android:visibility="gone" />
+        <!-- Handle Bar -->
+        <View
+            android:layout_width="40dp"
+            android:layout_height="4dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="16dp"
+            android:background="#DADCE0"
+            android:radius="2dp" />
+
+        <!-- Header với nút đóng -->
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Thông tin"
+                android:textSize="14sp"
+                android:textColor="#5F6368"
+                android:layout_centerVertical="true" />
+
+            <ImageButton
+                android:id="@+id/btn_close_sheet"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_alignParentEnd="true"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Đóng"
+                android:src="@android:drawable/ic_menu_close_clear_cancel"
+                app:tint="#5F6368" />
+
+        </RelativeLayout>
+
+        <!-- Tên địa điểm -->
+        <TextView
+            android:id="@+id/tv_place_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Tên địa điểm"
+            android:textSize="22sp"
+            android:textColor="#202124"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <!-- Rating và category -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:id="@+id/tv_place_rating"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="4.5 ★"
+                android:textSize="14sp"
+                android:textColor="#5F6368"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=" • "
+                android:textSize="14sp"
+                android:textColor="#5F6368" />
+
+            <TextView
+                android:id="@+id/tv_place_category"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Nhà hàng"
+                android:textSize="14sp"
+                android:textColor="#5F6368" />
+
+        </LinearLayout>
+
+        <!-- Địa chỉ -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@android:drawable/ic_dialog_map"
+                app:tint="#5F6368" />
+
+            <TextView
+                android:id="@+id/tv_place_address"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="Địa chỉ"
+                android:textSize="14sp"
+                android:textColor="#5F6368"
+                android:layout_marginStart="12dp" />
+        </LinearLayout>
+
+        <!-- Khoảng cách -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="20dp">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@android:drawable/ic_menu_mylocation"
+                app:tint="#1A73E8" />
+
+            <TextView
+                android:id="@+id/tv_place_distance"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="2.5 km từ vị trí của bạn"
+                android:textSize="14sp"
+                android:textColor="#1A73E8"
+                android:textStyle="bold"
+                android:layout_marginStart="12dp" />
+        </LinearLayout>
+
+        <!-- Các nút hành động -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:id="@+id/btn_save_place"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="8dp"
+                android:background="?attr/selectableItemBackground">
+
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@android:drawable/ic_menu_save"
+                    app:tint="#1A73E8" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Lưu"
+                    android:textSize="12sp"
+                    android:textColor="#5F6368"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/btn_share_place"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="8dp"
+                android:background="?attr/selectableItemBackground">
+
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@android:drawable/ic_menu_share"
+                    app:tint="#1A73E8" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Chia sẻ"
+                    android:textSize="12sp"
+                    android:textColor="#5F6368"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/btn_nearby"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="8dp"
+                android:background="?attr/selectableItemBackground">
+
+                <ImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@android:drawable/ic_menu_search"
+                    app:tint="#1A73E8" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Gần đây"
+                    android:textSize="12sp"
+                    android:textColor="#5F6368"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- Nút chỉ đường lớn -->
+        <Button
+            android:id="@+id/btn_directions_bottom"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="Chỉ đường"
+            android:textSize="16sp"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/button_rounded"
+            android:backgroundTint="#1A73E8"
+            android:textAllCaps="false"
+            android:drawableStart="@android:drawable/ic_menu_directions"
+            android:drawableTint="#FFFFFF"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:gravity="center"
+            android:elevation="2dp" />
+
+    </LinearLayout>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
