@@ -4,7 +4,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#E5E5E5">
+    android:background="#E8F5E9">
 
     <!-- Bản đồ -->
     <org.osmdroid.views.MapView
@@ -12,13 +12,13 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Thanh tìm kiếm phía trên -->
+    <!-- Thanh tìm kiếm phía trên với gradient xanh lá -->
     <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="12dp"
         app:cardCornerRadius="28dp"
-        app:cardElevation="4dp"
+        app:cardElevation="8dp"
         android:backgroundTint="#FFFFFF">
 
         <LinearLayout
@@ -26,29 +26,30 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:padding="4dp"
-            android:gravity="center_vertical">
+            android:gravity="center_vertical"
+            android:background="@drawable/gradient_green_bg">
 
-            <!-- Logo Google Maps -->
+            <!-- Logo Trạm Sạc Xe Điện -->
             <ImageView
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:padding="8dp"
-                android:src="@drawable/ic_maps_logo"
-                android:contentDescription="Maps Logo" />
+                android:src="@drawable/ic_ev_charging"
+                android:contentDescription="EV Charging Logo" />
 
             <AutoCompleteTextView
                 android:id="@+id/search_box"
                 android:layout_width="0dp"
                 android:layout_height="48dp"
                 android:layout_weight="1"
-                android:hint="Tìm kiếm ở đây"
+                android:hint="Tìm trạm sạc gần bạn..."
                 android:imeOptions="actionSearch"
                 android:inputType="text"
                 android:importantForAutofill="no"
                 android:background="@null"
                 android:textSize="16sp"
-                android:textColor="#202124"
-                android:textColorHint="#70757A"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#E0F2F1"
                 android:singleLine="true"
                 android:paddingStart="4dp"
                 android:paddingEnd="8dp"
@@ -63,23 +64,23 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Voice search"
                 android:src="@android:drawable/ic_btn_speak_now"
-                app:tint="#5F6368" />
+                app:tint="#FFFFFF" />
 
             <!-- Avatar -->
             <ImageView
                 android:id="@+id/user_avatar"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
                 android:layout_marginStart="4dp"
                 android:layout_marginEnd="8dp"
-                android:src="@android:drawable/ic_menu_myplaces"
+                android:src="@drawable/ic_electric_car"
                 android:contentDescription="User Avatar"
                 android:background="@drawable/circle_button" />
 
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- Các chip category ngang -->
+    <!-- Các chip category ngang - Chủ đề trạm sạc xe điện -->
     <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -94,15 +95,15 @@
             android:orientation="horizontal"
             android:paddingEnd="12dp">
 
-            <!-- Nhà hàng -->
+            <!-- Trạm sạc nhanh -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/chip_restaurant"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
                 app:cardCornerRadius="20dp"
-                app:cardElevation="2dp"
-                android:backgroundTint="#FFFFFF">
+                app:cardElevation="3dp"
+                android:backgroundTint="#4CAF50">
 
                 <LinearLayout
                     android:layout_width="wrap_content"
@@ -115,30 +116,31 @@
                     android:paddingBottom="10dp">
 
                     <ImageView
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@android:drawable/ic_dialog_info"
-                        app:tint="#5F6368" />
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_fast_charging"
+                        app:tint="#FFFFFF" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Nhà hàng"
+                        android:text="⚡ Sạc Nhanh"
                         android:textSize="14sp"
-                        android:textColor="#202124"
+                        android:textColor="#FFFFFF"
+                        android:textStyle="bold"
                         android:layout_marginStart="6dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Quán cà phê -->
+            <!-- Trạm sạc thường -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/chip_cafe"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
                 app:cardCornerRadius="20dp"
-                app:cardElevation="2dp"
-                android:backgroundTint="#FFFFFF">
+                app:cardElevation="3dp"
+                android:backgroundTint="#66BB6A">
 
                 <LinearLayout
                     android:layout_width="wrap_content"
@@ -151,30 +153,31 @@
                     android:paddingBottom="10dp">
 
                     <ImageView
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@android:drawable/ic_dialog_info"
-                        app:tint="#5F6368" />
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_battery_charging"
+                        app:tint="#FFFFFF" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Quán cà phê"
+                        android:text="🔋 Sạc Thường"
                         android:textSize="14sp"
-                        android:textColor="#202124"
+                        android:textColor="#FFFFFF"
+                        android:textStyle="bold"
                         android:layout_marginStart="6dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Khách sạn -->
+            <!-- Bãi đỗ xe điện -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/chip_hotel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
                 app:cardCornerRadius="20dp"
-                app:cardElevation="2dp"
-                android:backgroundTint="#FFFFFF">
+                app:cardElevation="3dp"
+                android:backgroundTint="#81C784">
 
                 <LinearLayout
                     android:layout_width="wrap_content"
@@ -187,29 +190,30 @@
                     android:paddingBottom="10dp">
 
                     <ImageView
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@android:drawable/ic_dialog_info"
-                        app:tint="#5F6368" />
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_electric_car"
+                        app:tint="#FFFFFF" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Khách sạn"
+                        android:text="🚗 Bãi Đỗ EV"
                         android:textSize="14sp"
-                        android:textColor="#202124"
+                        android:textColor="#FFFFFF"
+                        android:textStyle="bold"
                         android:layout_marginStart="6dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Bệnh viện -->
+            <!-- Trạm xanh - Eco -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/chip_hospital"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 app:cardCornerRadius="20dp"
-                app:cardElevation="2dp"
-                android:backgroundTint="#FFFFFF">
+                app:cardElevation="3dp"
+                android:backgroundTint="#A5D6A7">
 
                 <LinearLayout
                     android:layout_width="wrap_content"
@@ -222,17 +226,18 @@
                     android:paddingBottom="10dp">
 
                     <ImageView
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@android:drawable/ic_dialog_info"
-                        app:tint="#5F6368" />
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_eco_leaf"
+                        app:tint="#FFFFFF" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Bệnh viện"
+                        android:text="🌿 Eco Station"
                         android:textSize="14sp"
-                        android:textColor="#202124"
+                        android:textColor="#FFFFFF"
+                        android:textStyle="bold"
                         android:layout_marginStart="6dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
@@ -265,28 +270,26 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Layers"
                 android:src="@android:drawable/ic_dialog_map"
-                app:tint="#5F6368" />
+                app:tint="#4CAF50" />
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Nút mở danh sách bãi gần nhất -->
+        <!-- Nút mở danh sách trạm sạc gần nhất -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="56dp"
             android:layout_height="56dp"
             android:layout_marginBottom="12dp"
             app:cardCornerRadius="28dp"
             app:cardElevation="6dp"
-            android:backgroundTint="#FFFFFF">
+            android:backgroundTint="#4CAF50">
 
             <Button
                 android:id="@+id/btn_show_parking_list"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:text="List"
-                android:textSize="12sp"
-                android:textColor="#1A73E8"
+                android:text="⚡"
+                android:textSize="20sp"
+                android:textColor="#FFFFFF"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:drawableTop="@android:drawable/ic_menu_view"
-                android:drawableTint="#1A73E8"
                 android:gravity="center" />
         </com.google.android.material.card.MaterialCardView>
 
@@ -306,7 +309,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Vị trí của tôi"
                 android:src="@android:drawable/ic_menu_mylocation"
-                app:tint="#1A73E8" />
+                app:tint="#4CAF50" />
         </com.google.android.material.card.MaterialCardView>
 
         <!-- Nút mới: Lưu vị trí xe -->
@@ -316,18 +319,16 @@
             android:layout_marginBottom="12dp"
             app:cardCornerRadius="28dp"
             app:cardElevation="6dp"
-            android:backgroundTint="#FFFFFF">
+            android:backgroundTint="#66BB6A">
 
             <Button
                 android:id="@+id/btn_save_my_spot"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:text="Lưu xe"
-                android:textSize="12sp"
-                android:textColor="#1A73E8"
+                android:text="💾"
+                android:textSize="20sp"
+                android:textColor="#FFFFFF"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:drawableTop="@android:drawable/ic_menu_save"
-                android:drawableTint="#1A73E8"
                 android:gravity="center" />
         </com.google.android.material.card.MaterialCardView>
 
@@ -337,25 +338,23 @@
             android:layout_height="56dp"
             app:cardCornerRadius="28dp"
             app:cardElevation="6dp"
-            android:backgroundTint="#FFFFFF">
+            android:backgroundTint="#81C784">
 
             <Button
                 android:id="@+id/btn_find_my_spot"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:text="Tìm xe"
-                android:textSize="12sp"
-                android:textColor="#1A73E8"
+                android:text="🔍"
+                android:textSize="20sp"
+                android:textColor="#FFFFFF"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:drawableTop="@android:drawable/ic_menu_directions"
-                android:drawableTint="#1A73E8"
                 android:gravity="center"
                 android:visibility="gone" />
         </com.google.android.material.card.MaterialCardView>
 
     </LinearLayout>
 
-    <!-- Nút Directions (FAB ở dưới trái) -->
+    <!-- Nút Directions (FAB ở dưới trái) với gradient xanh -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/btn_directions"
         android:layout_width="wrap_content"
@@ -365,11 +364,11 @@
         android:contentDescription="Chỉ đường"
         android:src="@android:drawable/ic_menu_directions"
         app:tint="#FFFFFF"
-        app:backgroundTint="#1A73E8"
-        app:elevation="6dp"
+        app:backgroundTint="#4CAF50"
+        app:elevation="8dp"
         app:borderWidth="0dp" />
 
-    <!-- Bottom Sheet - Thông tin địa điểm -->
+    <!-- Bottom Sheet - Thông tin trạm sạc -->
     <LinearLayout
         android:id="@+id/bottom_sheet"
         android:layout_width="match_parent"
@@ -382,23 +381,28 @@
         android:paddingBottom="20dp"
         app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
 
+        <!-- Nút đặt chỗ sạc -->
         <Button
             android:id="@+id/btn_book_parking"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:text="ĐẶT TRƯỚC CHỖ NÀY"
+            android:text="⚡ ĐẶT CHỖ SẠC NGAY"
             android:textColor="#FFFFFF"
-            android:backgroundTint="#4CAF50"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:background="@drawable/gradient_green_bg"
             android:layout_marginHorizontal="16dp"
             android:layout_marginTop="8dp"
+            android:elevation="4dp"
             android:visibility="gone" />
+
         <!-- Handle Bar -->
         <View
             android:layout_width="40dp"
             android:layout_height="4dp"
             android:layout_gravity="center_horizontal"
             android:layout_marginBottom="16dp"
-            android:background="#DADCE0"
+            android:background="#81C784"
             android:radius="2dp" />
 
         <!-- Header với nút đóng -->
@@ -410,9 +414,10 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Thông tin"
+                android:text="⚡ Thông tin trạm sạc"
                 android:textSize="14sp"
-                android:textColor="#5F6368"
+                android:textColor="#4CAF50"
+                android:textStyle="bold"
                 android:layout_centerVertical="true" />
 
             <ImageButton
@@ -423,18 +428,18 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Đóng"
                 android:src="@android:drawable/ic_menu_close_clear_cancel"
-                app:tint="#5F6368" />
+                app:tint="#4CAF50" />
 
         </RelativeLayout>
 
-        <!-- Tên địa điểm -->
+        <!-- Tên trạm sạc -->
         <TextView
             android:id="@+id/tv_place_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Tên địa điểm"
+            android:text="Tên trạm sạc"
             android:textSize="22sp"
-            android:textColor="#202124"
+            android:textColor="#1B5E20"
             android:textStyle="bold"
             android:layout_marginBottom="4dp" />
 
@@ -450,9 +455,9 @@
                 android:id="@+id/tv_place_rating"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="4.5 ★"
+                android:text="⚡ Còn 5 chỗ sạc"
                 android:textSize="14sp"
-                android:textColor="#5F6368"
+                android:textColor="#4CAF50"
                 android:textStyle="bold" />
 
             <TextView
@@ -460,15 +465,15 @@
                 android:layout_height="wrap_content"
                 android:text=" • "
                 android:textSize="14sp"
-                android:textColor="#5F6368" />
+                android:textColor="#4CAF50" />
 
             <TextView
                 android:id="@+id/tv_place_category"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Nhà hàng"
+                android:text="Trạm sạc nhanh"
                 android:textSize="14sp"
-                android:textColor="#5F6368" />
+                android:textColor="#4CAF50" />
 
         </LinearLayout>
 
@@ -484,7 +489,7 @@
                 android:layout_width="20dp"
                 android:layout_height="20dp"
                 android:src="@android:drawable/ic_dialog_map"
-                app:tint="#5F6368" />
+                app:tint="#4CAF50" />
 
             <TextView
                 android:id="@+id/tv_place_address"
@@ -493,7 +498,7 @@
                 android:layout_height="wrap_content"
                 android:text="Địa chỉ"
                 android:textSize="14sp"
-                android:textColor="#5F6368"
+                android:textColor="#2E7D32"
                 android:layout_marginStart="12dp" />
         </LinearLayout>
 
@@ -509,7 +514,7 @@
                 android:layout_width="20dp"
                 android:layout_height="20dp"
                 android:src="@android:drawable/ic_menu_mylocation"
-                app:tint="#1A73E8" />
+                app:tint="#4CAF50" />
 
             <TextView
                 android:id="@+id/tv_place_distance"
@@ -517,7 +522,7 @@
                 android:layout_height="wrap_content"
                 android:text="2.5 km từ vị trí của bạn"
                 android:textSize="14sp"
-                android:textColor="#1A73E8"
+                android:textColor="#4CAF50"
                 android:textStyle="bold"
                 android:layout_marginStart="12dp" />
         </LinearLayout>
@@ -544,14 +549,14 @@
                     android:layout_width="28dp"
                     android:layout_height="28dp"
                     android:src="@android:drawable/ic_menu_save"
-                    app:tint="#1A73E8" />
+                    app:tint="#4CAF50" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Lưu"
                     android:textSize="12sp"
-                    android:textColor="#5F6368"
+                    android:textColor="#2E7D32"
                     android:layout_marginTop="4dp" />
             </LinearLayout>
 
@@ -569,14 +574,14 @@
                     android:layout_width="28dp"
                     android:layout_height="28dp"
                     android:src="@android:drawable/ic_menu_share"
-                    app:tint="#1A73E8" />
+                    app:tint="#4CAF50" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Chia sẻ"
                     android:textSize="12sp"
-                    android:textColor="#5F6368"
+                    android:textColor="#2E7D32"
                     android:layout_marginTop="4dp" />
             </LinearLayout>
 
@@ -594,14 +599,14 @@
                     android:layout_width="28dp"
                     android:layout_height="28dp"
                     android:src="@android:drawable/ic_menu_search"
-                    app:tint="#1A73E8" />
+                    app:tint="#4CAF50" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Gần đây"
                     android:textSize="12sp"
-                    android:textColor="#5F6368"
+                    android:textColor="#2E7D32"
                     android:layout_marginTop="4dp" />
             </LinearLayout>
 
@@ -612,18 +617,16 @@
             android:id="@+id/btn_directions_bottom"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:text="Chỉ đường"
+            android:text="🚗 Chỉ đường đến trạm sạc"
             android:textSize="16sp"
             android:textColor="#FFFFFF"
-            android:background="@drawable/button_rounded"
-            android:backgroundTint="#1A73E8"
+            android:textStyle="bold"
+            android:background="@drawable/gradient_green_bg"
             android:textAllCaps="false"
-            android:drawableStart="@android:drawable/ic_menu_directions"
-            android:drawableTint="#FFFFFF"
             android:paddingStart="24dp"
             android:paddingEnd="24dp"
             android:gravity="center"
-            android:elevation="2dp" />
+            android:elevation="4dp" />
 
     </LinearLayout>
 

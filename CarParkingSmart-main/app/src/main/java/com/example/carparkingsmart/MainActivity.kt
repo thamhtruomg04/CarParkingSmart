@@ -289,7 +289,7 @@ class MainActivity : AppCompatActivity() {
         )
 
         // Thêm chữ "GẦN NHẤT" nếu đúng bãi đó
-        tvPlaceName.text = parking.name + if (parking.isNearest) " GẦN NHẤT" else ""
+        tvPlaceName.text = parking.name + if (parking.isNearest) " ⚡ GẦN NHẤT" else ""
         tvPlaceAddress.text = parking.address
 
         val availability = when {
@@ -308,9 +308,9 @@ class MainActivity : AppCompatActivity() {
 
         tvPlaceRating.text = availability + chargingAvailability
         tvPlaceCategory.text = if (parking.hasChargingStation) {
-            "Bãi đỗ xe • ${parking.totalSpots} chỗ tổng • Có trạm sạc điện"
+            "⚡ Trạm sạc xe điện • ${parking.totalSpots} chỗ tổng • ${parking.totalChargingSpots} cổng sạc"
         } else {
-            "Bãi đỗ xe • ${parking.totalSpots} chỗ tổng"
+            "🅿️ Bãi đỗ xe • ${parking.totalSpots} chỗ tổng"
         }
 
         myLocationOverlay?.myLocation?.let { myLoc ->
@@ -411,9 +411,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showNearestParkingNotification(parking: ParkingLot, distance: Double) {
-        val message = "BÃI ĐỖ XE GẦN NHẤT: ${parking.name}\n" +
+        val chargingInfo = if (parking.hasChargingStation) {
+            "⚡ Còn ${parking.availableChargingSpots} cổng sạc • "
+        } else ""
+        
+        val message = "⚡ TRẠM SẠC GẦN NHẤT: ${parking.name}\n" +
+                chargingInfo +
                 "Còn ${parking.availableSpots} chỗ • Cách ${formatDistance(distance)}\n" +
-                "Đặt trước ngay để giữ chỗ nhé!"
+                "Đặt trước ngay để sạc xe điện của bạn!"
 
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
@@ -756,19 +761,23 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupCategoryChips() {
         chipRestaurant.setOnClickListener {
-            searchNearbyPlaces("restaurant", "Nhà hàng")
+            findNearestChargingStation()
+            Toast.makeText(this, "Đang tìm trạm sạc nhanh gần bạn...", Toast.LENGTH_SHORT).show()
         }
 
         chipCafe.setOnClickListener {
-            searchNearbyPlaces("cafe", "Quán cà phê")
+            showAllChargingStations()
+            Toast.makeText(this, "Hiển thị tất cả trạm sạc thường...", Toast.LENGTH_SHORT).show()
         }
 
         chipHotel.setOnClickListener {
-            searchNearbyPlaces("hotel", "Khách sạn")
+            val evParkingLots = parkingLots.filter { it.hasChargingStation }
+            Toast.makeText(this, "Tìm thấy ${evParkingLots.size} bãi đỗ xe điện", Toast.LENGTH_SHORT).show()
         }
 
         chipHospital.setOnClickListener {
-            searchNearbyPlaces("hospital", "Bệnh viện")
+            Toast.makeText(this, "🌿 Tìm kiếm trạm sạc thân thiện môi trường", Toast.LENGTH_SHORT).show()
+            findNearestChargingStation()
         }
     }
 
