@@ -34,6 +34,13 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import com.example.carparkingsmart.data.AppDatabase
 import com.example.carparkingsmart.data.entity.ChargingStationEntity
+import com.example.carparkingsmart.api.RetrofitClient
+
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
+
+import android.content.res.ColorStateList
+import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity() {
     private lateinit var db: AppDatabase
@@ -66,8 +73,7 @@ class MainActivity : AppCompatActivity() {
     private var routeLine: Polyline? = null
     private var currentPlace: PlaceInfo? = null
 
-    // Danh sách bãi đỗ xe và marker
-    private val parkingLots = mutableListOf<ParkingLot>()
+    private var parkingLots: MutableList<ParkingLot> = mutableListOf()
     private val parkingMarkers = mutableListOf<Marker>()
     private val updateHandler = Handler(Looper.getMainLooper())
     private val notificationHandler = Handler(Looper.getMainLooper())
@@ -94,7 +100,56 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var btnShowParkingList: Button
 
+    private fun setupWardChips(allStations: List<ParkingLot>) {
+        val chipGroup = findViewById<ChipGroup>(R.id.chip_group_wards)
+        chipGroup.removeAllViews()
 
+        val wards = allStations.map { extractWard(it.address) }.distinct().sorted()
+
+        wards.forEach { wardName ->
+            // Sửa lỗi: Thêm 'this' vào Chip constructor
+            val chip = Chip(this).apply {
+                text = wardName
+                isCheckable = true
+
+                // Sửa lỗi 1: Dùng ColorStateList thay vì Resource ID để tránh lỗi green_500
+                chipBackgroundColor = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#4CAF50"))
+
+                // Sửa lỗi 2: Ép kiểu màu trắng chuẩn Android
+                setTextColor(android.graphics.Color.WHITE)
+
+                setOnCheckedChangeListener { _, isChecked ->
+                    if (isChecked) {
+                        val filteredList = allStations.filter { it.address.contains(wardName, ignoreCase = true) }
+                        // Sửa lỗi 3: Đảm bảo hàm displayParkingLots nhận vào 1 List
+                        displayParkingLots(filteredList)
+                    } else {
+                        displayParkingLots(allStations)
+                    }
+                }
+            }
+            chipGroup.addView(chip)
+        }
+    }
+
+    private fun extractWard(address: String): String {
+        val keywords = listOf(
+            "Đức Thắng", "Cổ Nhuế", "Xuân Đỉnh", "Phú Diễn",
+            "Minh Khai", "Xuân La", "Liên Mạc", "Thụy Phương"
+        )
+
+        // Tìm từ khóa trong địa chỉ (không phân biệt hoa thường)
+        val found = keywords.find { address.contains(it, ignoreCase = true) }
+
+        return found ?: "Khác"
+    }
+    /*
+    private fun extractWard(address: String): String {
+        val regex = Regex("(Phường|P\\.)\\s+([^,]+)", RegexOption.IGNORE_CASE)
+        val match = regex.find(address)
+
+        return match?.groupValues?.get(2)?.trim() ?: "Khác"
+    }*/
 
     data class PlaceInfo(
         val lat: Double,
@@ -134,38 +189,27 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        db = Room.databaseBuilder(
-            applicationContext,
-            AppDatabase::class.java,
-            "charging_db"
-        ).build()
-
-        val dao = db.chargingDao()
-
-        Configuration.getInstance().userAgentValue = "CarParkingSmart/1.0 (Android)"
+        // Cấu hình OSMDroid
+        Configuration.getInstance().userAgentValue = "CarParkingSmart/1.0"
         Configuration.getInstance().load(this, getPreferences(MODE_PRIVATE))
 
         setContentView(R.layout.activity_main)
 
+        // Khởi tạo Database
+        db = Room.databaseBuilder(applicationContext, AppDatabase::class.java, "charging_db").build()
+
+        // Khởi tạo giao diện
         initViews()
         setupMap()
         setupMyLocation()
         setupSearchWithAutocomplete()
         setupButtons()
         setupBottomSheet()
-        setupCategoryChips()
 
-        //initializeParkingLots()
-        //displayParkingLots()
-        //startParkingUpdates()
-        //startProximityCheck()
-        lifecycleScope.launch {
-            val dao = db.chargingDao()
+        // setupCategoryChips() <-- Tạm thời comment dòng này lại nếu hàm này bên dưới vẫn đang gọi đến các chipRestaurant cũ
 
-            dao.updateAvailableSlots(1, 10)
-
-            loadChargingStationsFromDB()
-        }
+        // Tải dữ liệu từ Django
+        loadChargingStationsFromDB()
     }
 
     private fun initViews() {
@@ -186,15 +230,12 @@ class MainActivity : AppCompatActivity() {
         btnSharePlace = findViewById(R.id.btn_share_place)
         btnNearby = findViewById(R.id.btn_nearby)
 
-        chipRestaurant = findViewById(R.id.chip_restaurant)
-        chipCafe = findViewById(R.id.chip_cafe)
-        chipHotel = findViewById(R.id.chip_hotel)
-        chipHospital = findViewById(R.id.chip_hospital)
         btnBookParking = findViewById(R.id.btn_book_parking)
         btnSaveMySpot = findViewById(R.id.btn_save_my_spot)
         btnFindMySpot = findViewById(R.id.btn_find_my_spot)
-
         btnShowParkingList = findViewById(R.id.btn_show_parking_list)
+
+        // XÓA HOẶC COMMENT CÁC DÒNG chipRestaurant, chipCafe... VÌ XML KHÔNG CÓ
     }
 
     private fun setupMap() {
@@ -202,89 +243,73 @@ class MainActivity : AppCompatActivity() {
         map.setMultiTouchControls(true)
         map.setBuiltInZoomControls(false)
         map.controller.setZoom(15.0)
-        // Trung tâm khu vực Bắc Từ Liêm
+
         map.controller.setCenter(GeoPoint(21.0717, 105.7672))
     }
 
-    private fun initializeParkingLots() {
-        // Bãi đỗ xe tại khu vực Bắc Từ Liêm, Hà Nội với trạm sạc xe điện
-        parkingLots.add(ParkingLot(1, "Bãi đỗ xe Big C Thăng Long", 21.007235, 105.793757, 150, 45, "222 Trần Duy Hưng, Trung Hoà, Cầu Giấy", hasChargingStation = true, totalChargingSpots = 8, availableChargingSpots = 3))
-        parkingLots.add(ParkingLot(2, "Bãi đỗ xe Aeon Mall Hà Đông", 20.989667, 105.751850, 200, 78, "Số 27 Cổ Linh, Long Biên", hasChargingStation = true, totalChargingSpots = 10, availableChargingSpots = 5))
-        parkingLots.add(ParkingLot(3, "Bãi đỗ xe Mỹ Đình Plaza", 21.030715, 105.775943, 120, 23, "Mỹ Đình 2, Nam Từ Liêm", hasChargingStation = false))
-        parkingLots.add(ParkingLot(4, "Bãi đỗ xe Vincom Trần Duy Hưng", 21.007126,  105.795478, 180, 92, "119 Trần Duy Hưng, Trung Hoà, Cầu Giấy", hasChargingStation = true, totalChargingSpots = 6, availableChargingSpots = 2))
-        parkingLots.add(ParkingLot(5, "Bãi đỗ xe Keangnam Landmark", 21.018449, 105.783905, 250, 134, "Phạm Hùng, Nam Từ Liêm", hasChargingStation = true, totalChargingSpots = 12, availableChargingSpots = 8))
-        parkingLots.add(ParkingLot(6, "Bãi đỗ xe Lotte Center", 21.031870, 105.811739, 300, 67, "54 Liễu Giai, Ba Đình", hasChargingStation = true, totalChargingSpots = 15, availableChargingSpots = 0))
-        parkingLots.add(ParkingLot(7, "Bãi đỗ xe Mipec Long Biên", 21.045422, 105.865876, 100, 8, "229 Tây Sơn, Đống Đa", hasChargingStation = false))
-        parkingLots.add(ParkingLot(8, "Bãi đỗ xe Royal City", 21.002899, 105.815364, 280, 156, "72A Nguyễn Trãi, Thanh Xuân", hasChargingStation = true, totalChargingSpots = 10, availableChargingSpots = 7))
-        parkingLots.add(ParkingLot(
-            id = 9,
-            name = "Bãi đỗ xe Khu A - ĐH Mỏ Địa chất",
-            lat = 21.071494,
-            lon = 105.773825,
-            totalSpots = 120,
-            availableSpots = 50,
-            address = "Khu A, Trường ĐH Mỏ - Địa chất, Phố Viên, Bắc Từ Liêm, Hà Nội",
-            hasChargingStation = true,
-            totalChargingSpots = 20,
-            availableChargingSpots = 12
-        ))
-    }
 
-    private fun displayParkingLots() {
-        parkingMarkers.forEach { map.overlays.remove(it) }
-        parkingMarkers.clear()
 
-        parkingLots.forEach { parking ->
-            val marker = Marker(map).apply {
-                position = GeoPoint(parking.lat, parking.lon)
-                title = parking.name
+    private fun displayParkingLots(list: List<ParkingLot>? = null) {
+        runOnUiThread {
+            // 1. Kiểm tra Map và Dữ liệu
+            val dataToShow = list ?: parkingLots
+            if (map == null) return@runOnUiThread
 
-                val availability = when {
-                    parking.availableSpots == 0 -> "Hết chỗ"
-                    parking.availableSpots < 10 -> "Còn ${parking.availableSpots} chỗ"
-                    else -> "Còn ${parking.availableSpots} chỗ"
+            try {
+                // 2. Xóa các Marker cũ an toàn
+                parkingMarkers.forEach { map.overlays.remove(it) }
+                parkingMarkers.clear()
+
+                // 3. Vẽ từng địa điểm lên bản đồ
+                dataToShow.forEach { parking ->
+                    val marker = Marker(map).apply {
+                        position = GeoPoint(parking.lat, parking.lon)
+                        title = parking.name
+
+                        // Hiển thị trạng thái chỗ đỗ
+                        val availability = if (parking.availableSpots <= 0) "Hết chỗ" else "Còn ${parking.availableSpots}/${parking.totalSpots} chỗ"
+
+                        // Hiển thị thông tin trạm sạc
+                        val chargingInfo = if (parking.hasChargingStation) {
+                            if (parking.availableChargingSpots <= 0) "\n⚡ Hết chỗ sạc"
+                            else "\n⚡ Trạm sạc: ${parking.availableChargingSpots}/${parking.totalChargingSpots}"
+                        } else ""
+
+                        // Tính khoảng cách
+                        val distanceText = myLocationOverlay?.myLocation?.let { loc ->
+                            " • " + formatDistance(calculateDistance(loc.latitude, loc.longitude, parking.lat, parking.lon))
+                        } ?: ""
+
+                        snippet = "$availability$distanceText$chargingInfo\n${parking.address}"
+                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+
+                        // Cập nhật Icon chuẩn (Dùng ContextCompat để chống lỗi Resource)
+                        val iconRes = when {
+                            parking.name.contains("ĐH Mỏ Địa chất", ignoreCase = true) || parking.isNearest ->
+                                android.R.drawable.btn_star_big_on
+                            parking.hasChargingStation && parking.availableChargingSpots > 0 ->
+                                android.R.drawable.ic_menu_compass
+                            parking.availableSpots <= 0 ->
+                                android.R.drawable.ic_dialog_alert
+                            else ->
+                                android.R.drawable.ic_menu_mylocation
+                        }
+                        icon = ContextCompat.getDrawable(this@MainActivity, iconRes)
+
+                        setOnMarkerClickListener { _, _ ->
+                            showParkingDetails(parking)
+                            showInfoWindow()
+                            true
+                        }
+                    }
+                    parkingMarkers.add(marker)
+                    map.overlays.add(marker)
                 }
-                
-                val chargingInfo = if (parking.hasChargingStation) {
-                    when {
-                        parking.availableChargingSpots == 0 -> "⚡ Hết chỗ sạc"
-                        parking.availableChargingSpots < 3 -> "⚡ Còn ${parking.availableChargingSpots} chỗ sạc"
-                        else -> "⚡ Còn ${parking.availableChargingSpots}/${parking.totalChargingSpots} chỗ sạc"
-                    }
-                } else ""
-
-                val distanceText = myLocationOverlay?.myLocation?.let { loc ->
-                    "• " + formatDistance(calculateDistance(loc.latitude, loc.longitude, parking.lat, parking.lon))
-                } ?: ""
-
-                snippet = "$availability $distanceText\n$chargingInfo\n${parking.address}"
-
-                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-
-                icon = when {
-                    parking.name.contains("ĐH Mỏ Địa chất", ignoreCase = true) -> {
-                        resources.getDrawable(android.R.drawable.btn_star_big_on, null)  // Ngôi sao vàng lớn luôn!
-                    }
-                    parking.isNearest -> {
-                        resources.getDrawable(android.R.drawable.btn_star_big_on, null)  // Ngôi sao cho bãi gần nhất
-                    }
-                    parking.hasChargingStation && parking.availableChargingSpots > 0 -> {
-                        resources.getDrawable(android.R.drawable.ic_menu_compass, null)  // Icon đặc biệt cho trạm sạc
-                    }
-                    parking.availableSpots == 0 -> resources.getDrawable(android.R.drawable.ic_dialog_alert, null)
-                    parking.availableSpots < 10 -> resources.getDrawable(android.R.drawable.ic_dialog_info, null)
-                    else -> resources.getDrawable(android.R.drawable.ic_menu_mylocation, null)
-                }
-
-                setOnMarkerClickListener { _, _ ->
-                    showParkingDetails(parking)
-                    true
-                }
+                map.invalidate() // Vẽ lại bản đồ
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
-            parkingMarkers.add(marker)
-            map.overlays.add(marker)
         }
-        map.invalidate()
     }
 
     private fun bookParkingSpot(parking: ParkingLot) {
@@ -306,31 +331,29 @@ class MainActivity : AppCompatActivity() {
             parking.lon,
             parking.name,
             parking.address,
-            "Bãi đỗ xe"
+            if (parking.hasChargingStation) "Trạm sạc xe điện" else "Bãi đỗ xe"
         )
 
-        // Thêm chữ "GẦN NHẤT" nếu đúng bãi đó
+        // 1. Tên bãi và trạng thái gần nhất
         tvPlaceName.text = parking.name + if (parking.isNearest) " ⚡ GẦN NHẤT" else ""
         tvPlaceAddress.text = parking.address
 
-        val availability = when {
-            parking.availableSpots == 0 -> "Hết chỗ trống"
-            parking.availableSpots < 10 -> "Sắp đầy (${parking.availableSpots}/${parking.totalSpots})"
-            else -> "Còn ${parking.availableSpots}/${parking.totalSpots} chỗ"
-        }
+        // 2. QUAN TRỌNG: Ghi đè chữ "Đang tải" bằng dữ liệu thực tế
+        if (parking.hasChargingStation) {
+            // Cập nhật vào TextView tv_place_rating
+            tvPlaceRating.text = "⚡ Còn ${parking.availableChargingSpots}/${parking.totalChargingSpots} chỗ sạc"
+            tvPlaceRating.setTextColor(android.graphics.Color.parseColor("#4CAF50")) // Màu xanh lá
 
-        tvPlaceCategory.text = if (parking.hasChargingStation) {
-            "⚡ Có trạm sạc (${parking.availableChargingSpots} /${parking.totalChargingSpots})"
+            // Cập nhật category
+            tvPlaceCategory.text = "Trạm sạc xe điện"
         } else {
-            "🅿️ Bãi đỗ xe (${parking.availableSpots}/${parking.totalSpots})"
-        }
-        val chargingAvailability = if (parking.hasChargingStation) {
-            when {
-                parking.availableChargingSpots == 0 -> " • ⚡ Hết chỗ sạc"
-                else -> " • ⚡ Còn ${parking.availableChargingSpots} / ${parking.totalChargingSpots} chỗ sạc"
-            }
-        } else ""
+            tvPlaceRating.text = "🅿️ Còn ${parking.availableSpots}/${parking.totalSpots} chỗ"
+            tvPlaceRating.setTextColor(android.graphics.Color.parseColor("#757575")) // Màu xám
 
+            tvPlaceCategory.text = "Bãi đỗ xe thường"
+        }
+
+        // 3. Tính toán khoảng cách
         myLocationOverlay?.myLocation?.let { myLoc ->
             val distance = calculateDistance(myLoc.latitude, myLoc.longitude, parking.lat, parking.lon)
             tvPlaceDistance.text = "${formatDistance(distance)} từ vị trí của bạn"
@@ -338,9 +361,11 @@ class MainActivity : AppCompatActivity() {
             tvPlaceDistance.text = "Bật GPS để xem khoảng cách"
         }
 
+        // 4. Cấu hình Bottom Sheet (Giữ thông báo hiện ra)
+        bottomSheetBehavior.peekHeight = 450 // Tăng nhẹ chiều cao để không bị che chữ
         bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
-        bottomSheetBehavior.peekHeight = 420
 
+        // 5. Nút đặt chỗ
         btnBookParking.visibility = View.VISIBLE
         btnBookParking.setOnClickListener {
             if (parking.hasChargingStation) {
@@ -1400,30 +1425,40 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun loadChargingStationsFromDB() {
-        val stations = db.chargingDao().getAllStations()
+    private fun loadChargingStationsFromDB() {
+        lifecycleScope.launch {
+            try {
+                val apiStations = RetrofitClient.instance.getStations()
 
-        parkingLots.clear()
+                // Xóa cũ thêm mới an toàn
+                parkingLots.clear()
 
-        stations.forEach { station ->
-            parkingLots.add(
-                ParkingLot(
-                    id = station.id,
-                    name = station.name,
-                    lat = station.lat,
-                    lon = station.lon,
-                    totalSpots = station.totalSlots,
-                    availableSpots = station.availableSlots,
-                    address = station.address,
-                    hasChargingStation = true,
-                    totalChargingSpots = station.totalSlots,
-                    availableChargingSpots = station.availableSlots
-                )
-            )
-        }
+                apiStations.forEach { station ->
+                    parkingLots.add(ParkingLot(
+                        id = station.id,
+                        name = station.name,
+                        lat = station.latitude,
+                        lon = station.longitude,
+                        totalSpots = station.total_slots ?: 0,
+                        availableSpots = station.available_slots ?: 0,
+                        address = station.address ?: "",
+                        hasChargingStation = true,
+                        totalChargingSpots = station.total_slots ?: 0,
+                        availableChargingSpots = station.available_slots ?: 0
+                    ))
+                }
 
-        runOnUiThread {
-            displayParkingLots()
+                // ĐƯA LÊN UI THREAD ĐỂ VẼ - KHÔNG SẼ BỊ OUT
+                runOnUiThread {
+                    if (parkingLots.isNotEmpty()) {
+                        displayParkingLots(parkingLots)
+                        setupWardChips(parkingLots)
+                    }
+                }
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
