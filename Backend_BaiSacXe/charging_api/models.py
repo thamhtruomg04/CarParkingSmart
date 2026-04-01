@@ -2,9 +2,12 @@ from django.db import models
 from django.utils import timezone
 from datetime import timedelta
 from django.core.exceptions import ValidationError
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
 
 class ChargingStation(models.Model):
     name = models.CharField(max_length=255, verbose_name="Tên trạm")
+    ward = models.CharField(max_length=100, verbose_name="Phường/Xã", default="Khác")
     address = models.TextField(verbose_name="Địa chỉ")
     latitude = models.DecimalField(max_digits=12, decimal_places=9, null=True, blank=True)
     longitude = models.DecimalField(max_digits=12, decimal_places=9, null=True, blank=True)
@@ -16,36 +19,41 @@ class ChargingStation(models.Model):
 
 class Booking(models.Model):
     STATUS_CHOICES = [
-        ('Pending', 'Chờ thanh toán'),
-        ('Confirmed', 'Đã giữ chỗ'),
+        ('Quick_Booking', 'Đang giữ chỗ 10p'),
+        ('Confirmed', 'Đã giữ chỗ/Đang sạc'),
         ('Completed', 'Đã sạc xong'),
-        ('Cancelled', 'Đã hủy'),
+        ('Cancelled', 'Đã hủy/Hết hạn'),
     ]
 
     user_id = models.CharField(max_length=100, verbose_name="ID người dùng")
     station = models.ForeignKey(ChargingStation, on_delete=models.CASCADE)
     booking_time = models.DateTimeField(auto_now_add=True)
     expiry_time = models.DateTimeField(null=True, blank=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Quick_Booking')
     qr_code_data = models.TextField(null=True, blank=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    is_checked_in = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         is_new = self.pk is None
         
         if is_new:
+            # Kiểm tra chỗ trống trước khi trừ
             if self.station.available_slots <= 0:
                 raise ValidationError("Trạm sạc đã hết chỗ trống!")
             
-            self.expiry_time = timezone.now() + timedelta(hours=1)
+            # Thiết lập thông tin mặc định
+            self.expiry_time = timezone.now() + timedelta(seconds=15)
             self.qr_code_data = f"PAYMENT_FOR_BOOKING_{self.user_id}_{timezone.now().timestamp()}"
             
+            # Trừ chỗ trống
             self.station.available_slots -= 1
             self.station.save()
-
-        elif self.status == 'Cancelled':
-            previous_status = Booking.objects.get(pk=self.pk).status
-            if previous_status != 'Cancelled':
+        else:
+            # Logic khi cập nhật trạng thái
+            old_booking = Booking.objects.get(pk=self.pk)
+            # Nếu chuyển sang Cancelled hoặc Completed thì hoàn lại chỗ trống
+            if self.status in ['Cancelled', 'Completed'] and old_booking.status not in ['Cancelled', 'Completed']:
                 self.station.available_slots += 1
                 self.station.save()
 
@@ -53,3 +61,12 @@ class Booking(models.Model):
 
     def __str__(self):
         return f"{self.user_id} - {self.station.name}"
+
+# --- ĐƯA SIGNAL RA NGOÀI CLASS ---
+@receiver(post_delete, sender=Booking)
+def restore_slot_on_delete(sender, instance, **kwargs):
+    # Khi xóa dòng trên Admin, số chỗ sẽ tự động cộng lại
+    station = instance.station
+    if instance.status not in ['Cancelled', 'Completed']: # Chỉ cộng nếu booking chưa ở trạng thái kết thúc
+        station.available_slots += 1
+        station.save()
