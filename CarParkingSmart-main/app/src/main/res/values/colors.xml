@@ -8,6 +8,7 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
     
     <!-- EV Charging Theme Colors -->
     <color name="ev_green_primary">#4CAF50</color>
@@ -28,4 +29,5 @@
     <color name="ev_available">#4CAF50</color>
     <color name="ev_low">#FF9800</color>
     <color name="ev_full">#F44336</color>
+    <color name="green_main">#4CAF50</color>
 </resources>

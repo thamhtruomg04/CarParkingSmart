@@ -5,6 +5,7 @@ data class LoginResponse(val token: String)
 data class StationResponse(
     val id: Int,
     val name: String,
+    val ward: String?,
     val address: String,
     val latitude: Double,
     val longitude: Double,

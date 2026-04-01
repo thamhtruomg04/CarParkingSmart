@@ -20,8 +20,10 @@ class LoginActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         // Kiểm tra Token cũ (Auto Login)
-        val sharedPref = getSharedPreferences("AUTH_PREF", Context.MODE_PRIVATE)
-        if (sharedPref.getString("token", null) != null) {
+        val sharedPref = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+
+        // Nếu đã có token và CŨNG PHẢI có email thì mới cho vào thẳng
+        if (sharedPref.getString("token", null) != null && sharedPref.getString("user_email", null) != null) {
             startActivity(Intent(this, MainActivity::class.java))
             finish()
             return
@@ -50,16 +52,24 @@ class LoginActivity : AppCompatActivity() {
 
         viewModel.loginResult.observe(this) { token ->
             if (token != null) {
-                // Lưu Token vào bộ nhớ máy để Auto Login cho lần sau
-                sharedPref.edit().putString("token", token).apply()
+                // 1. Lấy email/username người dùng vừa nhập thành công
+                val userEmail = findViewById<EditText>(R.id.edtUsername).text.toString().trim()
+
+                // 2. Lưu cả Token và Email vào bộ nhớ máy
+                // LƯU Ý: Phải dùng chung tên "UserPrefs" để MainActivity đọc được
+                val sharedPref = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+                with(sharedPref.edit()) {
+                    putString("token", token)
+                    putString("user_email", userEmail) // Lưu email ở đây
+                    apply()
+                }
 
                 Toast.makeText(this, "Đăng nhập thành công!", Toast.LENGTH_SHORT).show()
                 val intent = Intent(this, MainActivity::class.java)
                 startActivity(intent)
                 finish()
             } else {
-                // Nếu thất bại, thường là do sai URL hoặc sai User/Pass
-                Toast.makeText(this, "Đăng nhập thất bại! Kiểm tra lại tài khoản.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Đăng nhập thất bại!", Toast.LENGTH_SHORT).show()
             }
         }
     }
