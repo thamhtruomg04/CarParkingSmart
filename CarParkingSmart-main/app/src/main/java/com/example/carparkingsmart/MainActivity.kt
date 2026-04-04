@@ -269,14 +269,7 @@ class MainActivity : AppCompatActivity() {
                             // 1. Cập nhật dữ liệu vào các TextView trong Card
                             showParkingDetails(parking)
 
-                            // 2. HIỆN LẠI CARD: Nếu Card đang ẩn (HIDDEN), hãy kéo nó lên (COLLAPSED)
-                            // Dòng này chính là chìa khóa để hiện lại Card khi bạn ấn vào địa điểm
-                            if (bottomSheetBehavior.state == BottomSheetBehavior.STATE_HIDDEN) {
-                                bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
-                            } else {
-                                // Nếu nó đang thu nhỏ thì mở to lên cho người dùng dễ nhìn, hoặc giữ nguyên tùy bạn
-                                bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
-                            }
+                            bottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
 
                             showInfoWindow()
                             true
