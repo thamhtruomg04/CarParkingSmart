@@ -1,10 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
+
 <androidx.coordinatorlayout.widget.CoordinatorLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#E8F5E9">
+
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/my_toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="#4CAF50"
+        android:elevation="4dp"
+        app:title="Trạm Sạc Thông Minh"
+        app:titleTextColor="#FFFFFF" />
+
+
 
     <!-- Bản đồ -->
     <org.osmdroid.views.MapView
@@ -153,42 +165,21 @@
                 app:tint="#4CAF50" />
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Nút lưu vị trí xe -->
+
         <com.google.android.material.card.MaterialCardView
             android:layout_width="56dp"
             android:layout_height="56dp"
             android:layout_marginBottom="12dp"
             app:cardCornerRadius="28dp"
             app:cardElevation="6dp"
-            android:backgroundTint="#66BB6A">
-            <Button
-                android:id="@+id/btn_save_my_spot"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:text="💾"
-                android:textSize="20sp"
-                android:textColor="#FFFFFF"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:gravity="center" />
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- Nút tìm xe của tôi -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            app:cardCornerRadius="28dp"
-            app:cardElevation="6dp"
-            android:backgroundTint="#81C784">
-            <Button
-                android:id="@+id/btn_find_my_spot"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:text="🔍"
-                android:textSize="20sp"
-                android:textColor="#FFFFFF"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:gravity="center"
-                android:visibility="gone" />
+            android:backgroundTint="#FF5252"> <ImageButton
+            android:id="@+id/btn_logout_map"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Đăng xuất"
+            android:src="@android:drawable/ic_lock_power_off"
+            app:tint="#FFFFFF" />
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 

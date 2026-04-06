@@ -43,6 +43,7 @@ import com.google.android.material.chip.ChipGroup
 import android.content.res.ColorStateList
 import androidx.core.content.ContextCompat
 import com.bumptech.glide.Glide
+import com.example.carparkingsmart.auth.LoginActivity
 
 class MainActivity : AppCompatActivity() {
     private lateinit var db: AppDatabase
@@ -171,6 +172,9 @@ class MainActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_main)
 
+        val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.my_toolbar)
+        setSupportActionBar(toolbar)
+
         // Khởi tạo Database
         db = Room.databaseBuilder(applicationContext, AppDatabase::class.java, "charging_db").build()
 
@@ -209,10 +213,20 @@ class MainActivity : AppCompatActivity() {
 
         btnBookParking = findViewById(R.id.btn_book_parking)
         btnBookParkingLater = findViewById(R.id.btn_book_parking_later)
-        btnSaveMySpot = findViewById(R.id.btn_save_my_spot)
-        btnFindMySpot = findViewById(R.id.btn_find_my_spot)
+        //btnSaveMySpot = findViewById(R.id.btn_save_my_spot)
+        //btnFindMySpot = findViewById(R.id.btn_find_my_spot)
         btnShowParkingList = findViewById(R.id.btn_show_parking_list)
         tvLiveOccupancy = findViewById(R.id.tv_live_occupancy)
+
+        val btnLogout = findViewById<ImageButton>(R.id.btn_logout_map)
+        btnLogout.setOnClickListener {
+            showLogoutConfirmation()
+        }
+
+        val userAvatar = findViewById<ImageView>(R.id.user_avatar)
+        userAvatar.setOnClickListener {
+            showLogoutConfirmation() //
+        }
     }
 
     private fun setupMap() {
@@ -241,21 +255,18 @@ class MainActivity : AppCompatActivity() {
                         position = GeoPoint(parking.lat, parking.lon)
                         title = parking.name
 
-                        // Hiển thị trạng thái chỗ đỗ
-                        val availability = if (parking.availableSpots <= 0) "Hết chỗ" else "Còn ${parking.availableSpots}/${parking.totalSpots} chỗ"
-
-                        // Hiển thị thông tin trạm sạc
+                        // 1. Chỉ giữ lại thông tin Trạm sạc hoặc Bãi đỗ xe
                         val chargingInfo = if (parking.hasChargingStation) {
-                            if (parking.availableChargingSpots <= 0) "\n⚡ Hết chỗ sạc"
-                            else "\n⚡ Trạm sạc: ${parking.availableChargingSpots}/${parking.totalChargingSpots}"
-                        } else ""
+                            if (parking.availableChargingSpots <= 0) "⚡ Hết chỗ sạc"
+                            else "⚡ Trạm sạc: ${parking.availableChargingSpots}/${parking.totalChargingSpots}"
+                        } else {
+                            "🅿 Bãi đỗ xe"
+                        }
 
-                        // Tính khoảng cách
-                        val distanceText = myLocationOverlay?.myLocation?.let { loc ->
-                            " • " + formatDistance(calculateDistance(loc.latitude, loc.longitude, parking.lat, parking.lon))
-                        } ?: ""
+                        // 2. Gán vào snippet (Bỏ hoàn toàn phần distanceText)
+                        // Kết quả hiện: "⚡ Trạm sạc: 5/10" và dòng dưới là địa chỉ
+                        snippet = "$chargingInfo\n${parking.address}"
 
-                        snippet = "$availability$distanceText$chargingInfo\n${parking.address}"
                         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
 
                         // Cập nhật Icon chuẩn (Dùng ContextCompat để chống lỗi Resource)
@@ -270,8 +281,6 @@ class MainActivity : AppCompatActivity() {
                                 android.R.drawable.ic_menu_mylocation
                         }
                         icon = ContextCompat.getDrawable(this@MainActivity, iconRes)
-
-                        // ... (phần code bên trên của bạn giữ nguyên)
 
                         setOnMarkerClickListener { _, _ ->
                             // 1. Cập nhật dữ liệu vào các TextView trong Card
@@ -577,7 +586,7 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Tính năng đang phát triển", Toast.LENGTH_SHORT).show()
         }
 
-        btnSaveMySpot.setOnClickListener {
+        /*btnSaveMySpot.setOnClickListener {
             myLocationOverlay?.myLocation?.let { loc ->
                 savedParkingSpot = GeoPoint(loc.latitude, loc.longitude)
                 savedParkingTime = System.currentTimeMillis()
@@ -585,15 +594,15 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Đã lưu vị trí xe tại ${savedParkingName ?: "vị trí hiện tại"}!", Toast.LENGTH_LONG).show()
                 btnFindMySpot.visibility = View.VISIBLE  // Hiện nút tìm
             } ?: Toast.makeText(this, "Bật GPS để lưu vị trí", Toast.LENGTH_SHORT).show()
-        }
+        }*/
 
-        btnFindMySpot.setOnClickListener {
+        /*btnFindMySpot.setOnClickListener {
             myLocationOverlay?.myLocation?.let { currentLoc ->
                 savedParkingSpot?.let { savedSpot ->
                     calculateRouteWalking(currentLoc.latitude, currentLoc.longitude, savedSpot.latitude, savedSpot.longitude)
                 } ?: Toast.makeText(this, "Chưa lưu vị trí xe nào", Toast.LENGTH_SHORT).show()
             } ?: Toast.makeText(this, "Bật GPS để tìm", Toast.LENGTH_SHORT).show()
-        }
+        }*/
     }
 
     private fun calculateRouteWalking(fromLat: Double, fromLon: Double, toLat: Double, toLon: Double) {
@@ -1474,5 +1483,42 @@ class MainActivity : AppCompatActivity() {
         searchHandler.removeCallbacksAndMessages(null)
         updateHandler.removeCallbacksAndMessages(null)
         notificationHandler.removeCallbacksAndMessages(null)
+    }
+
+    // --- PHẦN XỬ LÝ ĐĂNG XUẤT (MENU) ---
+    override fun onCreateOptionsMenu(menu: android.view.Menu?): Boolean {
+        // Nạp file xml menu vào ActionBar
+        menuInflater.inflate(R.menu.main_menu, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
+        // Xử lý khi bấm vào mục "Đăng xuất"
+        if (item.itemId == R.id.action_logout) {
+            showLogoutConfirmation()
+            return true
+        }
+        return super.onOptionsItemSelected(item)
+    }
+
+    private fun showLogoutConfirmation() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Xác nhận đăng xuất")
+            .setMessage("Bạn có chắc chắn muốn thoát tài khoản không?")
+            .setPositiveButton("Đăng xuất") { _, _ -> performLogout() }
+            .setNegativeButton("Hủy", null)
+            .show()
+    }
+
+    private fun performLogout() {
+        // 1. Xóa sạch dữ liệu đăng nhập
+        val sharedPref = getSharedPreferences("UserPrefs", android.content.Context.MODE_PRIVATE)
+        sharedPref.edit().clear().apply()
+
+        // 2. Chuyển về màn hình Đăng nhập
+        val intent = android.content.Intent(this, LoginActivity::class.java)
+        intent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
+        startActivity(intent)
+        finish()
     }
 }
