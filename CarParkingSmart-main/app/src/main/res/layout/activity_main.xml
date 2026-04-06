@@ -192,7 +192,7 @@
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 
-    <!-- Nút Directions (FAB ở dưới trái) -->
+    <!-- Nút Directions (FAB ở dưới trái)-->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/btn_directions"
         android:layout_width="wrap_content"
@@ -255,6 +255,30 @@
                 android:src="@android:drawable/ic_menu_close_clear_cancel"
                 app:tint="#4CAF50" />
         </RelativeLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="8dp"
+            android:padding="4dp"
+            android:background="@drawable/chip_charging_bg"> <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:src="@drawable/ic_battery_charging"
+            app:tint="#FF5722" />
+
+            <TextView
+                android:id="@+id/tv_live_occupancy"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="Đang có 5 người sạc tại đây"
+                android:textColor="#E64A19"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+        </LinearLayout>
 
         <!-- Tên trạm sạc -->
         <TextView

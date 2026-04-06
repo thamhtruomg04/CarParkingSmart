@@ -108,6 +108,13 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var btnBookParkingLater: Button
 
+    private lateinit var tvLiveOccupancy: TextView
+
+    private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val startPoint = GeoPoint(lat1, lon1)
+        val endPoint = GeoPoint(lat2, lon2)
+        return startPoint.distanceToAsDouble(endPoint)
+    }
 
     data class PlaceInfo(
         val id: Int,
@@ -201,10 +208,11 @@ class MainActivity : AppCompatActivity() {
         btnCloseSheet = findViewById(R.id.btn_close_sheet)
 
         btnBookParking = findViewById(R.id.btn_book_parking)
-        btnBookParkingLater = findViewById(R.id.btn_book_parking_later) // THÊM DÒNG NÀY
+        btnBookParkingLater = findViewById(R.id.btn_book_parking_later)
         btnSaveMySpot = findViewById(R.id.btn_save_my_spot)
         btnFindMySpot = findViewById(R.id.btn_find_my_spot)
         btnShowParkingList = findViewById(R.id.btn_show_parking_list)
+        tvLiveOccupancy = findViewById(R.id.tv_live_occupancy)
     }
 
     private fun setupMap() {
@@ -275,7 +283,6 @@ class MainActivity : AppCompatActivity() {
                             true
                         }
 
-// ... (phần code bên dưới giữ nguyên)
                     }
                     parkingMarkers.add(marker)
                     map.overlays.add(marker)
@@ -299,56 +306,62 @@ class MainActivity : AppCompatActivity() {
         )
 
         // 1. Cập nhật UI cơ bản
-        tvPlaceName.text = parking.name + if (parking.isNearest) " ⚡ GẦN NHẤT" else ""
+        tvPlaceName.text = parking.name + (if (parking.isNearest) " ⚡ GẦN NHẤT" else "")
         tvPlaceAddress.text = parking.address
 
-        // 2. Cập nhật trạng thái chỗ sạc/đỗ
+        // 2. Cập nhật trạng thái chỗ sạc/đỗ và Live Occupancy
         if (parking.hasChargingStation) {
-            tvPlaceRating.text =
-                "⚡ Còn ${parking.availableChargingSpots}/${parking.totalChargingSpots} chỗ sạc"
+            val peopleCharging = parking.totalChargingSpots - parking.availableChargingSpots
+            tvPlaceRating.text = "⚡ Còn ${parking.availableChargingSpots}/${parking.totalChargingSpots} chỗ sạc"
             tvPlaceRating.setTextColor(android.graphics.Color.parseColor("#4CAF50"))
             tvPlaceCategory.text = "Trạm sạc xe điện"
+
+            // Hiển thị số người đang sạc
+            (tvLiveOccupancy.parent as? View)?.visibility = View.VISIBLE
+            tvLiveOccupancy.text = "🔥 Đang có $peopleCharging người sạc tại đây"
         } else {
-            tvPlaceRating.text = "🅿Còn ${parking.availableSpots}/${parking.totalSpots} chỗ"
+            tvPlaceRating.text = "🅿 Còn ${parking.availableSpots}/${parking.totalSpots} chỗ"
             tvPlaceRating.setTextColor(android.graphics.Color.parseColor("#757575"))
             tvPlaceCategory.text = "Bãi đỗ xe thường"
+            (tvLiveOccupancy.parent as? View)?.visibility = View.GONE
         }
 
-        // 3. Hiển thị khoảng cách
+        // 3. XỬ LÝ KHOẢNG CÁCH (PHẦN QUAN TRỌNG NHẤT)
         myLocationOverlay?.myLocation?.let { myLoc ->
-            val distance =
-                calculateDistance(myLoc.latitude, myLoc.longitude, parking.lat, parking.lon)
-            tvPlaceDistance.text = "${formatDistance(distance)} từ vị trí của bạn"
+            // Bước A: Tính tạm đường chim bay (12.8km) để hiện ngay lập tức tránh để trống UI
+            val chimBay = calculateDistance(myLoc.latitude, myLoc.longitude, parking.lat, parking.lon)
+            tvPlaceDistance.text = "Đang tính lộ trình... (~${formatDistance(chimBay)})"
+
+            // Bước B: Gọi API OSRM để lấy khoảng cách lái xe thực tế (~23km)
+            // Hàm này sẽ tự động ghi đè lên tvPlaceDistance khi có kết quả
+            updateActualDrivingDistance(parking)
+
         } ?: run {
             tvPlaceDistance.text = "Bật GPS để xem khoảng cách"
         }
 
-        // 4. XỬ LÝ CÁC NÚT ĐẶT CHỖ (MỚI)
-
-        // Nút Đặt Ngay (btn_book_parking)
+        // 4. XỬ LÝ CÁC NÚT ĐẶT CHỖ
         val btnBookNow = findViewById<Button>(R.id.btn_book_parking)
         btnBookNow.setOnClickListener {
             if (parking.availableChargingSpots > 0) {
                 confirmQuickBooking(parking)
             } else {
-                Toast.makeText(this, "Rất tiếc, trạm này hiện đã hết chỗ sạc!", Toast.LENGTH_SHORT)
-                    .show()
+                Toast.makeText(this, "Rất tiếc, trạm này hiện đã hết chỗ sạc!", Toast.LENGTH_SHORT).show()
             }
         }
 
-        // Nút Đặt Trước (btn_book_parking_later)
         val btnBookLater = findViewById<Button>(R.id.btn_book_parking_later)
-
         btnBookLater.setOnClickListener {
-            // Kiểm tra xem đã có thông tin địa điểm chưa
             currentPlace?.let { place ->
-                // GỌI HÀM THANH TOÁN QR MÀ BẠN VỪA FIX XONG
+                // Đảm bảo đã có currentBookingId trước khi gọi (nếu logic của bạn yêu cầu)
                 showBookingPayment(place.name)
             } ?: run {
-                // Nếu click quá nhanh khi data chưa load kịp
                 Toast.makeText(this, "Vui lòng đợi trong giây lát...", Toast.LENGTH_SHORT).show()
             }
         }
+
+        // Cuối cùng: Mở BottomSheet nếu nó đang ẩn
+        bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
     }
 
     private fun getLoggedInUserEmail(): String {
@@ -679,39 +692,39 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadSuggestions(query: String) {
-        // Tìm trong danh sách bãi đỗ xe trước
+        // 1. Tìm trong danh sách nội bộ (Local) trước để tăng tốc độ
         val localMatches = parkingLots.filter { parking ->
             parking.name.contains(query, ignoreCase = true) ||
-            parking.address.contains(query, ignoreCase = true)
+                    parking.address.contains(query, ignoreCase = true)
         }.map { parking ->
             PlaceInfo(
                 parking.id,
                 parking.lat,
                 parking.lon,
-                parking.name + if (parking.hasChargingStation) " ⚡" else "",
+                parking.name + (if (parking.hasChargingStation) " ⚡" else ""),
                 parking.address,
                 "Bãi đỗ xe"
             )
         }
-        
-        // Nếu có kết quả local, hiển thị ngay
+
+        // Nếu có kết quả nội bộ, hiển thị ngay và dừng lại
         if (localMatches.isNotEmpty()) {
             runOnUiThread {
                 suggestionsData.clear()
                 suggestionsData.addAll(localMatches)
-                
+
                 suggestionsAdapter.clear()
                 suggestionsAdapter.addAll(localMatches.map { it.name })
                 suggestionsAdapter.notifyDataSetChanged()
-                
+
                 if (searchBox.hasFocus()) {
                     searchBox.showDropDown()
                 }
             }
             return
         }
-        
-        // Nếu không có kết quả local, tìm trên mạng
+
+        // 2. Nếu không thấy trong máy, mới gọi API Nominatim (Online)
         Thread {
             try {
                 val encoded = URLEncoder.encode(query, "UTF-8")
@@ -735,8 +748,10 @@ class MainActivity : AppCompatActivity() {
 
                     for (i in 0 until array.length()) {
                         val obj = array.getJSONObject(i)
-                        val lat = obj.getDouble("lat")
-                        val lon = obj.getDouble("lon")
+
+                        // LƯU Ý: Nominatim trả về lat/lon là Chuỗi (String), cần convert sang Double
+                        val lat = obj.getString("lat").toDouble()
+                        val lon = obj.getString("lon").toDouble()
                         val displayName = obj.getString("display_name")
 
                         val shortName = if (obj.has("name") && obj.getString("name").isNotEmpty()) {
@@ -746,7 +761,7 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         if (!displayNames.contains(shortName)) {
-                            tempList.add(PlaceInfo(0,lat, lon, shortName, displayName))
+                            tempList.add(PlaceInfo(0, lat, lon, shortName, displayName))
                             displayNames.add(shortName)
                         }
                     }
@@ -988,19 +1003,19 @@ class MainActivity : AppCompatActivity() {
         tvPlaceName.text = name
         tvPlaceAddress.text = address
 
-        val rating = String.format("%.1f", 3.5 + Math.random() * 1.5)
-        tvPlaceRating.text = "$rating ★"
-        tvPlaceCategory.text = if (category.isNotEmpty()) category else "Địa điểm"
-
+        // 1. Hiển thị tạm thời khoảng cách đường thẳng (trong khi chờ API phản hồi)
         myLocationOverlay?.myLocation?.let { myLoc ->
-            val distance = calculateDistance(myLoc.latitude, myLoc.longitude, lat, lon)
-            tvPlaceDistance.text = "${formatDistance(distance)} từ vị trí của bạn"
+            val chimBay = calculateDistance(myLoc.latitude, myLoc.longitude, lat, lon)
+            tvPlaceDistance.text = "Đang tính lộ trình... (${formatDistance(chimBay)})"
+
+            // 2. GỌI NGAY hàm tính đường đi thực tế (OSRM)
+            val target = ParkingLot(0, name, "", lat, lon, 0, 0, address)
+            updateActualDrivingDistance(target)
         } ?: run {
-            tvPlaceDistance.text = "Bật GPS để xem khoảng cách"
+            tvPlaceDistance.text = "Vui lòng bật GPS"
         }
 
         bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
-        bottomSheetBehavior.peekHeight = 400
     }
 
     private fun showBookingPayment(placeName: String) {
@@ -1242,17 +1257,48 @@ class MainActivity : AppCompatActivity() {
             }
             .show()
     }
+    private fun updateActualDrivingDistance(parking: ParkingLot) {
+        myLocationOverlay?.myLocation?.let { myLoc ->
+            Thread {
+                try {
 
-    private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val r = 6371000.0
-        val dLat = Math.toRadians(lat2 - lat1)
-        val dLon = Math.toRadians(lon2 - lon1)
-        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
-                Math.sin(dLon / 2) * Math.sin(dLon / 2)
-        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-        return r * c
+                    val urlString = "https://router.project-osrm.org/route/v1/driving/" +
+                            "${myLoc.longitude},${myLoc.latitude};${parking.lon},${parking.lat}?overview=false"
+
+                    val url = URL(urlString)
+                    val conn = url.openConnection() as HttpURLConnection
+                    conn.requestMethod = "GET"
+                    conn.connectTimeout = 5000
+
+                    if (conn.responseCode == 200) {
+                        val json = conn.inputStream.bufferedReader().readText()
+                        val root = JSONObject(json)
+                        val routes = root.getJSONArray("routes")
+
+                        if (routes.length() > 0) {
+                            val route = routes.getJSONObject(0)
+                            // distance trả về đơn vị MÉT
+                            val realDistanceInMeters = route.getDouble("distance")
+                            val durationInSeconds = route.getDouble("duration")
+
+                            runOnUiThread {
+                                // Cập nhật lại TextView với con số thực tế (ví dụ ~23km)
+                                tvPlaceDistance.text = "${formatDistance(realDistanceInMeters)} (Theo lộ trình lái xe)"
+
+                                // Hiển thị thêm thời gian dự kiến vào phần category hoặc một TextView khác
+                                val timeText = formatDuration(durationInSeconds)
+                                tvPlaceCategory.text = "Dự kiến di chuyển: $timeText"
+                            }
+                        }
+                    }
+                    conn.disconnect()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }.start()
+        }
     }
+
 
     private fun formatDistance(meters: Double): String {
         return if (meters < 1000) {
