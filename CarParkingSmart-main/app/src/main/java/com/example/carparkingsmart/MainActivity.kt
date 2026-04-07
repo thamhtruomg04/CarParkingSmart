@@ -198,7 +198,7 @@ class MainActivity : AppCompatActivity() {
         btnVoice = findViewById(R.id.btn_voice)
         btnMyLocation = findViewById(R.id.btn_my_location)
         btnLayers = findViewById(R.id.btn_layers)
-        btnDirections = findViewById(R.id.btn_directions)
+        //btnDirections = findViewById(R.id.btn_directions)
         bottomSheet = findViewById(R.id.bottom_sheet)
         tvPlaceName = findViewById(R.id.tv_place_name)
         tvPlaceAddress = findViewById(R.id.tv_place_address)
@@ -574,13 +574,13 @@ class MainActivity : AppCompatActivity() {
             showLayerOptions()
         }
 
-        btnDirections.setOnClickListener {
+        /*btnDirections.setOnClickListener {
             if (currentPlace != null) {
                 showDirections()
             } else {
                 Toast.makeText(this, "Vui lòng chọn địa điểm đích", Toast.LENGTH_SHORT).show()
             }
-        }
+        }*/
 
         btnVoice.setOnClickListener {
             Toast.makeText(this, "Tính năng đang phát triển", Toast.LENGTH_SHORT).show()

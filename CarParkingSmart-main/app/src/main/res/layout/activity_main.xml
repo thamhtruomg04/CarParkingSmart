@@ -36,8 +36,9 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:padding="4dp"
-            android:gravity="center_vertical"
+            android:padding="2dp"
+            android:gravity="center_vertical|center_horizontal"
+
             android:background="@drawable/gradient_green_bg">
             <!-- Logo Trạm Sạc Xe Điện -->
             <ImageView
@@ -183,7 +184,7 @@
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 
-    <!-- Nút Directions (FAB ở dưới trái)-->
+    <!-- Nút Directions (FAB ở dưới trái)
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/btn_directions"
         android:layout_width="wrap_content"
@@ -196,7 +197,7 @@
         app:backgroundTint="#4CAF50"
         app:elevation="8dp"
         app:borderWidth="0dp" />
-
+    -->
     <!-- Bottom Sheet - Thông tin trạm sạc -->
     <LinearLayout
         android:id="@+id/bottom_sheet"
@@ -358,7 +359,7 @@
                 android:layout_marginStart="12dp" />
         </LinearLayout>
 
-        <!-- Các nút hành động (Lưu, Chia sẻ, Gần đây) -->
+        <!-- Các nút hành động (Nút chọn map, trở về vị trí, đăng xuất) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
