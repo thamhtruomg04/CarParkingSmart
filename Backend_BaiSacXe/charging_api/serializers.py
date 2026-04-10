@@ -1,8 +1,7 @@
 from rest_framework import serializers
 from .models import ChargingStation, Booking
-
 from django.contrib.auth.models import User
-from rest_framework import serializers
+from .models import ChargingSlot 
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -25,3 +24,8 @@ class BookingSerializer(serializers.ModelSerializer):
         model = Booking
         fields = '__all__'
         read_only_fields = ['expiry_time', 'qr_code_data', 'booking_time']
+
+class ChargingSlotSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChargingSlot
+        fields = ['id', 'slot_code', 'is_available'] # Các trường này phải khớp với Android

@@ -1,9 +1,9 @@
 from rest_framework import viewsets, generics, status, decorators
+from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.utils import timezone
-from django.db import transaction
-from .models import ChargingStation, Booking
-from .serializers import ChargingStationSerializer, BookingSerializer, UserSerializer
+from .models import ChargingStation, Booking, ChargingSlot
+from .serializers import ChargingStationSerializer, BookingSerializer, UserSerializer, ChargingSlotSerializer
 
 class RegisterView(generics.CreateAPIView):
     serializer_class = UserSerializer
@@ -23,20 +23,26 @@ class ChargingStationViewSet(viewsets.ModelViewSet):
     queryset = ChargingStation.objects.all()
     serializer_class = ChargingStationSerializer
 
+    # --- ĐOẠN SỬA QUAN TRỌNG NHẤT: Thêm Action để Android tải Slots ---
+    @decorators.action(detail=True, methods=['get'])
+    def slots(self, request, pk=None):
+        """
+        URL tạo ra: GET /api/stations/{id}/slots/
+        pk chính là ID của trạm sạc từ URL
+        """
+        slots = ChargingSlot.objects.filter(station_id=pk)
+        serializer = ChargingSlotSerializer(slots, many=True)
+        return Response(serializer.data)
+
     def list(self, request, *args, **kwargs):
         now = timezone.now()
-        # Tìm các booking quá hạn mà vẫn đang ở trạng thái Quick_Booking
         expired_bookings = Booking.objects.filter(
             status='Quick_Booking',
             expiry_time__lt=now
         )
-
-        # Chỉ cần chuyển status sang 'Cancelled', 
-        # Model của bạn sẽ tự động cộng lại available_slots nhờ hàm save() đã viết.
         for b in expired_bookings:
             b.status = 'Cancelled'
             b.save() 
-
         return super().list(request, *args, **kwargs)
 
 class BookingViewSet(viewsets.ModelViewSet):
@@ -44,19 +50,12 @@ class BookingViewSet(viewsets.ModelViewSet):
     serializer_class = BookingSerializer
 
     def create(self, request, *args, **kwargs):
-        """Xử lý khi bấm 'Đặt ngay' từ Android"""
         return super().create(request, *args, **kwargs)
 
     @decorators.action(detail=False, methods=['post'])
     def check_in(self, request):
-        """
-        Action mới: API để Android gọi khi người dùng đến trạm và quét mã QR.
-        URL: /api/bookings/check_in/
-        """
         user_id = request.data.get('user_id')
         station_id = request.data.get('station_id')
-
-        # Tìm booking đang giữ chỗ hợp lệ
         booking = Booking.objects.filter(
             user_id=user_id,
             station_id=station_id,
@@ -70,7 +69,6 @@ class BookingViewSet(viewsets.ModelViewSet):
         if booking.expiry_time < timezone.now():
             return Response({"error": "Thời gian giữ chỗ đã hết hạn!"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Cập nhật trạng thái sang ĐANG SẠC
         booking.status = 'Confirmed'
         booking.is_checked_in = True
         booking.save()
@@ -87,7 +85,8 @@ class BookingViewSet(viewsets.ModelViewSet):
 
         if booking:
             booking.status = 'Completed'
-            booking.save() # Model tự cộng available_slots += 1
+            booking.save()
             return Response({"message": "Đã hoàn tất sạc và trả chỗ!"})
         
         return Response({"error": "Không tìm thấy phiên sạc!"}, status=400)
+

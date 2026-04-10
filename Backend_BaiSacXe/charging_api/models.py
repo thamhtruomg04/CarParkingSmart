@@ -9,14 +9,22 @@ class ChargingStation(models.Model):
     name = models.CharField(max_length=255, verbose_name="Tên trạm")
     ward = models.CharField(max_length=100, verbose_name="Phường/Xã", default="Khác")
     address = models.TextField(verbose_name="Địa chỉ")
-    latitude = models.DecimalField(max_digits=12, decimal_places=9, null=True, blank=True)
-    longitude = models.DecimalField(max_digits=12, decimal_places=9, null=True, blank=True)
+    latitude = models.DecimalField(max_digits=12, decimal_places=7, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=12, decimal_places=7, null=True, blank=True)
     total_slots = models.IntegerField(default=0)
     available_slots = models.IntegerField(default=0)
 
     def __str__(self):
         return self.name
 
+
+class ChargingSlot(models.Model):
+    station = models.ForeignKey(ChargingStation, on_delete=models.CASCADE, related_name='slots')
+    slot_code = models.CharField(max_length=5) # Ví dụ: A1, B2...
+    is_available = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.station.name} - {self.slot_code}" 
 class Booking(models.Model):
     STATUS_CHOICES = [
         ('Quick_Booking', 'Đang giữ chỗ 10p'),
@@ -33,6 +41,7 @@ class Booking(models.Model):
     qr_code_data = models.TextField(null=True, blank=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     is_checked_in = models.BooleanField(default=False)
+    slot = models.ForeignKey(ChargingSlot, on_delete=models.SET_NULL, null=True, blank=True)
 
     def save(self, *args, **kwargs):
         is_new = self.pk is None
@@ -70,3 +79,4 @@ def restore_slot_on_delete(sender, instance, **kwargs):
     if instance.status not in ['Cancelled', 'Completed']: # Chỉ cộng nếu booking chưa ở trạng thái kết thúc
         station.available_slots += 1
         station.save()
+

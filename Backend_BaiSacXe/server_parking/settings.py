@@ -85,8 +85,12 @@ WSGI_APPLICATION = 'server_parking.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'parking_db',       
+        'USER': 'postgres',         
+        'PASSWORD': '', 
+        'HOST': '127.0.0.1',
+        'PORT': '5432',             
     }
 }
 
@@ -126,6 +130,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+# settings.py
+ALLOWED_HOSTS = ['adrianne-jaggier-aiko.ngrok-free.dev', 'localhost', '127.0.0.1', '.ngrok-free.dev']
 
-ALLOWED_HOSTS = ['192.168.1.11', 'localhost', '127.0.0.1']
 CORS_ALLOW_ALL_ORIGINS = True
