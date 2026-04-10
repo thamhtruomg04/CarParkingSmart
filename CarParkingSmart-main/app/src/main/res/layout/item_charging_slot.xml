@@ -1,0 +1,16 @@
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/card_slot"
+    android:layout_width="match_parent"
+    android:layout_height="60dp"
+    android:layout_margin="4dp"
+    app:cardCornerRadius="8dp">
+
+    <TextView
+        android:id="@+id/tv_slot_code"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:textStyle="bold" />
+</com.google.android.material.card.MaterialCardView>

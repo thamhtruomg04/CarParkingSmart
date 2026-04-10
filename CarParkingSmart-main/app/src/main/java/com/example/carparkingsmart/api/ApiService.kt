@@ -1,49 +1,56 @@
 package com.example.carparkingsmart.api
 
 import okhttp3.ResponseBody
-import retrofit2.Response // Để dùng Response<T>
-import retrofit2.http.GET
-import retrofit2.http.POST
-import retrofit2.http.Body
-import retrofit2.http.Field
-import retrofit2.http.FormUrlEncoded
-import retrofit2.http.Path // QUAN TRỌNG: Để truyền ID vào URL
+import retrofit2.Response
+import retrofit2.http.*
 
 interface ApiService {
+    @Headers("ngrok-skip-browser-warning: 69420")
     @POST("api/register/")
     suspend fun register(@Body user: RegisterRequest): RegisterResponse
 
+    @Headers("ngrok-skip-browser-warning: 69420")
     @POST("api/api-token-auth/")
     suspend fun login(@Body credentials: LoginRequest): LoginResponse
 
+    @Headers("ngrok-skip-browser-warning: 69420")
     @GET("api/stations/")
     suspend fun getStations(): List<StationResponse>
 
+    // --- 1. THÊM HÀM LẤY DANH SÁCH Ô SẠC TỪ API ---
+    @Headers("ngrok-skip-browser-warning: 69420")
+    @GET("api/stations/{id}/slots/")
+    suspend fun getSlots(
+        @Path("id") stationId: Int
+    ): Response<List<com.example.carparkingsmart.ChargingSlot>>
+
+    // --- 2. HÀM ĐẶT CHỖ (Đã có slotId) ---
     @FormUrlEncoded
+    @Headers("ngrok-skip-browser-warning: 69420")
     @POST("api/bookings/")
     suspend fun createBooking(
         @Field("user_id") userId: String,
         @Field("station") stationId: Int,
+        @Field("slot") slotId: Int,
         @Field("status") status: String
     ): Response<BookingResponse>
 
     @FormUrlEncoded
+    @Headers("ngrok-skip-browser-warning: 69420")
     @POST("api/bookings/{id}/update_status/")
     suspend fun updateBookingStatus(
-        @Path("id") bookingId: Int, // Map {id} trên URL với biến này
+        @Path("id") bookingId: Int,
         @Field("status") status: String
     ): Response<ResponseBody>
 
-
-    // Thêm class này vào project của bạn
+    // --- 3. CẬP NHẬT DATA CLASS ---
     data class BookingResponse(
         val id: Int,
         val user_id: String,
         val station: Int,
+        val slot: Int?,
         val status: String,
         val booking_time: String,
         val expiry_time: String? = null
     )
-
-
 }

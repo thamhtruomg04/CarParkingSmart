@@ -28,7 +28,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import kotlin.random.Random
-import android.view.View
+
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 
 import androidx.room.Room
 import androidx.lifecycle.lifecycleScope
@@ -44,6 +46,16 @@ import android.content.res.ColorStateList
 import androidx.core.content.ContextCompat
 import com.bumptech.glide.Glide
 import com.example.carparkingsmart.auth.LoginActivity
+import org.osmdroid.views.overlay.TilesOverlay
+import androidx.appcompat.app.AppCompatDelegate
+
+import android.view.View
+import android.widget.Button
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.bottomsheet.BottomSheetDialog
+
+
 
 class MainActivity : AppCompatActivity() {
     private lateinit var db: AppDatabase
@@ -103,6 +115,8 @@ class MainActivity : AppCompatActivity() {
 
     private var previousNearestParking: ParkingLot? = null
 
+    private lateinit var btnThemeToggle: ImageButton
+
     private var lastNotificationTime: Long = 0L
 
     private lateinit var btnShowParkingList: Button
@@ -110,6 +124,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnBookParkingLater: Button
 
     private lateinit var tvLiveOccupancy: TextView
+
+    private var currentSelectedSlotId: Int = 0
 
     private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
         val startPoint = GeoPoint(lat1, lon1)
@@ -156,7 +172,7 @@ class MainActivity : AppCompatActivity() {
         val timestamp: Long,
         val distanceToStation: Double
     )
-    
+
     private var currentNearestParking: ParkingLot? = null
     private val chargingRequestQueue = mutableListOf<ChargingRequest>()
     private var currentNearestChargingStation: ParkingLot? = null
@@ -217,6 +233,7 @@ class MainActivity : AppCompatActivity() {
         //btnFindMySpot = findViewById(R.id.btn_find_my_spot)
         btnShowParkingList = findViewById(R.id.btn_show_parking_list)
         tvLiveOccupancy = findViewById(R.id.tv_live_occupancy)
+        btnThemeToggle = findViewById(R.id.btn_theme_toggle)
 
         val btnLogout = findViewById<ImageButton>(R.id.btn_logout_map)
         btnLogout.setOnClickListener {
@@ -229,33 +246,139 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun showSlotSelectionDialog(slots: List<ChargingSlot>) {
+        val dialog = BottomSheetDialog(this)
+        // Đảm bảo bạn đã tạo file dialog_select_slot.xml
+        val view = layoutInflater.inflate(R.layout.dialog_select_slot, null)
+        dialog.setContentView(view)
+
+        val rvSlots = view.findViewById<RecyclerView>(R.id.rv_slots)
+        val btnConfirm = view.findViewById<Button>(R.id.btn_confirm_slot)
+
+        var selectedSlot: ChargingSlot? = null
+
+        // 1. Cấu hình hiển thị lưới 5 cột
+        rvSlots.layoutManager = GridLayoutManager(this, 5)
+
+        // 2. Thiết lập Adapter và xử lý sự kiện khi người dùng chọn ô
+        rvSlots.adapter = SlotAdapter(slots) { slot ->
+            // Gán vào biến cục bộ để xử lý trong Dialog này
+            selectedSlot = slot
+
+            // QUAN TRỌNG: Gán ID vào biến toàn cục của MainActivity để hàm confirmQuickBooking có thể lấy dùng
+            currentSelectedSlotId = slot.id
+
+            // Hiện nút xác nhận và cập nhật tên ô đã chọn
+            btnConfirm.visibility = View.VISIBLE
+            btnConfirm.text = "Xác nhận đặt ô ${slot.slot_code}"
+        }
+
+        btnConfirm.setOnClickListener {
+            selectedSlot?.let { slot ->
+                // 1. Lưu lại ID ô đã chọn để gửi lên server
+                currentSelectedSlotId = slot.id
+
+                // 2. Gửi lệnh đặt chỗ lên Server Django (để giữ chỗ tạm thời)
+                guilenServerDatCho(slot)
+
+                // 3. Đóng sơ đồ chọn ô
+                dialog.dismiss()
+
+                // 4. MỞ CÁI NÀY: Hiện mã QR thanh toán (Cái hàm bạn vừa gửi)
+                showBookingPayment(currentPlace?.name ?: "Trạm sạc")
+            }
+        }
+
+        dialog.show()
+    }
+
+    private fun guilenServerDatCho(slot: ChargingSlot) {
+        // 1. Lấy thông tin người dùng từ SharedPreferences (Phải khớp tên "UserPrefs")
+        val sharedPref = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+
+        // Lấy "user_email" đã lưu từ LoginActivity, nếu không có thì để "Khách"
+        val currentUserEmail = sharedPref.getString("user_email", "Guest") ?: "Guest"
+
+        // 2. Cấu hình Retrofit (Dùng link ngrok của bạn từ settings.py)
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://adrianne-jaggier-aiko.ngrok-free.dev/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+
+        val apiService = retrofit.create(com.example.carparkingsmart.api.ApiService::class.java)
+
+        // 3. Thực hiện gọi API bằng Coroutine
+        lifecycleScope.launch {
+            try {
+                // userId gửi lên Django bây giờ sẽ là Email người dùng
+                val response = apiService.createBooking(
+                    userId = currentUserEmail,
+                    stationId = 1,      // ID trạm sạc hiện tại
+                    slotId = slot.id,   // ID của ô đỗ đã chọn (A1, B2...)
+                    status = "Quick_Booking"
+                )
+
+                if (response.isSuccessful) {
+                    Toast.makeText(this@MainActivity,
+                        "Thành công! Ô ${slot.slot_code} đã được giữ cho $currentUserEmail",
+                        Toast.LENGTH_LONG).show()
+                } else {
+                    // Nếu server trả về lỗi (ví dụ ô đã bị chiếm)
+                    Toast.makeText(this@MainActivity, "Ô này vừa mới có người đặt mất rồi!", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                // Lỗi kết nối, ngrok hết hạn, hoặc server sập
+                Toast.makeText(this@MainActivity, "Lỗi kết nối: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private fun setupMap() {
+        // 1. Thiết lập nguồn bản đồ và các điều khiển cơ bản
         map.setTileSource(TileSourceFactory.MAPNIK)
         map.setMultiTouchControls(true)
-        map.setBuiltInZoomControls(false)
+        map.setBuiltInZoomControls(false) // Tắt nút +/- mặc định để dùng cử chỉ tay
+
+        // 2. Cấu hình giới hạn Zoom để tránh người dùng zoom quá xa hoặc quá gần
+        map.minZoomLevel = 4.0
+        map.maxZoomLevel = 20.0
         map.controller.setZoom(15.0)
 
-        map.controller.setCenter(GeoPoint(21.0717, 105.7672))
+        // 3. Xử lý Giao diện tối (Dark Mode) cho các tấm bản đồ (Tiles)
+        if (isDarkMode()) {
+            // Sử dụng bộ lọc đảo ngược màu để biến bản đồ trắng thành đen
+            map.overlayManager.tilesOverlay.setColorFilter(TilesOverlay.INVERT_COLORS)
+        }
+
+        // 4. Thiết lập vị trí trung tâm mặc định (ĐH Mỏ Địa chất/Cổ Nhuế)
+        val startPoint = GeoPoint(21.0717, 105.7672)
+        map.controller.setCenter(startPoint)
+
+
+        // 5. Tùy chọn: Chặn bản đồ bị xoay (giúp người dùng đỡ rối khi tìm đường)
+        map.setMapOrientation(0f, false)
+    }
+
+    // Hàm bổ trợ kiểm tra chế độ tối của hệ thống
+    private fun isDarkMode(): Boolean {
+        val darkModeFlag = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
+        return darkModeFlag == android.content.res.Configuration.UI_MODE_NIGHT_YES
     }
 
     private fun displayParkingLots(list: List<ParkingLot>? = null) {
         runOnUiThread {
-            // 1. Kiểm tra Map và Dữ liệu
             val dataToShow = list ?: parkingLots
             if (map == null) return@runOnUiThread
 
             try {
-                // 2. Xóa các Marker cũ an toàn
                 parkingMarkers.forEach { map.overlays.remove(it) }
                 parkingMarkers.clear()
 
-                // 3. Vẽ từng địa điểm lên bản đồ
                 dataToShow.forEach { parking ->
                     val marker = Marker(map).apply {
                         position = GeoPoint(parking.lat, parking.lon)
                         title = parking.name
 
-                        // 1. Chỉ giữ lại thông tin Trạm sạc hoặc Bãi đỗ xe
                         val chargingInfo = if (parking.hasChargingStation) {
                             if (parking.availableChargingSpots <= 0) "⚡ Hết chỗ sạc"
                             else "⚡ Trạm sạc: ${parking.availableChargingSpots}/${parking.totalChargingSpots}"
@@ -263,40 +386,41 @@ class MainActivity : AppCompatActivity() {
                             "🅿 Bãi đỗ xe"
                         }
 
-                        // 2. Gán vào snippet (Bỏ hoàn toàn phần distanceText)
-                        // Kết quả hiện: "⚡ Trạm sạc: 5/10" và dòng dưới là địa chỉ
                         snippet = "$chargingInfo\n${parking.address}"
-
                         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
 
-                        // Cập nhật Icon chuẩn (Dùng ContextCompat để chống lỗi Resource)
-                        val iconRes = when {
-                            parking.name.contains("ĐH Mỏ Địa chất", ignoreCase = true) || parking.isNearest ->
-                                android.R.drawable.btn_star_big_on
-                            parking.hasChargingStation && parking.availableChargingSpots > 0 ->
-                                android.R.drawable.ic_menu_compass
-                            parking.availableSpots <= 0 ->
-                                android.R.drawable.ic_dialog_alert
-                            else ->
-                                android.R.drawable.ic_menu_mylocation
+                        // --- PHẦN THAY ĐỔI TẠI ĐÂY ---
+                        icon = when {
+                            // 1. Nếu là trạm sạc xe điện, dùng icon packing.png bạn đã tải
+                            parking.hasChargingStation -> {
+                                ContextCompat.getDrawable(this@MainActivity, R.drawable.ic_electric_car)
+                            }
+                            // 2. Nếu là bãi đỗ xe đặc biệt (Ví dụ ĐH Mỏ Địa chất)
+                            parking.name.contains("ĐH Mỏ Địa chất", ignoreCase = true) || parking.isNearest -> {
+                                ContextCompat.getDrawable(this@MainActivity, android.R.drawable.btn_star_big_on)
+                            }
+                            // 3. Nếu bãi đỗ xe thường hết chỗ
+                            parking.availableSpots <= 0 -> {
+                                ContextCompat.getDrawable(this@MainActivity, R.drawable.warn)
+                            }
+                            // 4. Bãi đỗ xe thường còn chỗ
+                            else -> {
+                                ContextCompat.getDrawable(this@MainActivity, R.drawable.ic_parking) // Hoặc giữ ic_menu_mylocation
+                            }
                         }
-                        icon = ContextCompat.getDrawable(this@MainActivity, iconRes)
+                        // ------------------------------
 
                         setOnMarkerClickListener { _, _ ->
-                            // 1. Cập nhật dữ liệu vào các TextView trong Card
                             showParkingDetails(parking)
-
                             bottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
-
                             showInfoWindow()
                             true
                         }
-
                     }
                     parkingMarkers.add(marker)
                     map.overlays.add(marker)
                 }
-                map.invalidate() // Vẽ lại bản đồ
+                map.invalidate()
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -361,11 +485,31 @@ class MainActivity : AppCompatActivity() {
 
         val btnBookLater = findViewById<Button>(R.id.btn_book_parking_later)
         btnBookLater.setOnClickListener {
-            currentPlace?.let { place ->
-                // Đảm bảo đã có currentBookingId trước khi gọi (nếu logic của bạn yêu cầu)
-                showBookingPayment(place.name)
-            } ?: run {
-                Toast.makeText(this, "Vui lòng đợi trong giây lát...", Toast.LENGTH_SHORT).show()
+            if (parking.hasChargingStation) {
+                // Gọi API lấy danh sách ô thực tế trước khi đặt trước
+                lifecycleScope.launch {
+                    try {
+                        // Sử dụng RetrofitClient để gọi hàm getSlots bạn vừa thêm vào ApiService
+                        val response = RetrofitClient.instance.getSlots(parking.id)
+
+                        if (response.isSuccessful) {
+                            val realSlots = response.body() ?: emptyList()
+                            if (realSlots.isNotEmpty()) {
+                                // Hiện sơ đồ để người dùng chọn ô trước khi hiện QR thanh toán
+                                showSlotSelectionDialog(realSlots)
+                            } else {
+                                Toast.makeText(this@MainActivity, "Trạm này chưa có dữ liệu ô sạc!", Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            Toast.makeText(this@MainActivity, "Không thể tải sơ đồ ô sạc từ máy chủ!", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("API_ERROR", "Lỗi lấy Slots: ${e.message}")
+                        Toast.makeText(this@MainActivity, "Lỗi kết nối: Không thể lấy danh sách ô!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } else {
+                Toast.makeText(this, "Bãi đỗ này không hỗ trợ đặt chỗ trước trực tuyến!", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -391,6 +535,7 @@ class MainActivity : AppCompatActivity() {
                         val response = RetrofitClient.instance.createBooking(
                             userId = userEmail,
                             stationId = parking.id,
+                            slotId = currentSelectedSlotId,
                             status = "Quick_Booking"
                         )
 
@@ -556,6 +701,12 @@ class MainActivity : AppCompatActivity() {
         myLocationOverlay = MyLocationNewOverlay(provider, map)
         myLocationOverlay?.enableMyLocation()
 
+        val userIcon = ContextCompat.getDrawable(this, R.drawable.location_person)
+        if (userIcon is android.graphics.drawable.BitmapDrawable) {
+            myLocationOverlay?.setPersonIcon(userIcon.bitmap)
+            myLocationOverlay?.setDirectionIcon(userIcon.bitmap)
+        }
+
         // Khi bắt được vị trí lần đầu tiên
         myLocationOverlay?.runOnFirstFix {
             runOnUiThread {
@@ -574,35 +725,24 @@ class MainActivity : AppCompatActivity() {
             showLayerOptions()
         }
 
-        /*btnDirections.setOnClickListener {
-            if (currentPlace != null) {
-                showDirections()
-            } else {
-                Toast.makeText(this, "Vui lòng chọn địa điểm đích", Toast.LENGTH_SHORT).show()
-            }
-        }*/
+
 
         btnVoice.setOnClickListener {
             Toast.makeText(this, "Tính năng đang phát triển", Toast.LENGTH_SHORT).show()
         }
 
-        /*btnSaveMySpot.setOnClickListener {
-            myLocationOverlay?.myLocation?.let { loc ->
-                savedParkingSpot = GeoPoint(loc.latitude, loc.longitude)
-                savedParkingTime = System.currentTimeMillis()
-                currentNearestParking?.let { savedParkingName = it.name }
-                Toast.makeText(this, "Đã lưu vị trí xe tại ${savedParkingName ?: "vị trí hiện tại"}!", Toast.LENGTH_LONG).show()
-                btnFindMySpot.visibility = View.VISIBLE  // Hiện nút tìm
-            } ?: Toast.makeText(this, "Bật GPS để lưu vị trí", Toast.LENGTH_SHORT).show()
-        }*/
-
-        /*btnFindMySpot.setOnClickListener {
-            myLocationOverlay?.myLocation?.let { currentLoc ->
-                savedParkingSpot?.let { savedSpot ->
-                    calculateRouteWalking(currentLoc.latitude, currentLoc.longitude, savedSpot.latitude, savedSpot.longitude)
-                } ?: Toast.makeText(this, "Chưa lưu vị trí xe nào", Toast.LENGTH_SHORT).show()
-            } ?: Toast.makeText(this, "Bật GPS để tìm", Toast.LENGTH_SHORT).show()
-        }*/
+        val btnThemeToggle = findViewById<ImageButton>(R.id.btn_theme_toggle)
+        btnThemeToggle.setOnClickListener {
+            if (isDarkMode()) {
+                // Chuyển sang Sáng
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
+                // Lưu ý: Lệnh trên sẽ khởi động lại Activity, nên bạn không cần
+                // lo lắng về việc set lại màu bản đồ thủ công ở đây.
+            } else {
+                // Chuyển sang Tối
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+            }
+        }
     }
 
     private fun calculateRouteWalking(fromLat: Double, fromLon: Double, toLat: Double, toLon: Double) {
