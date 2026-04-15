@@ -4,7 +4,7 @@ import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.*
 
-interface ApiService {
+"""interface ApiService {
     @Headers("ngrok-skip-browser-warning: 69420")
     @POST("api/register/")
     suspend fun register(@Body user: RegisterRequest): RegisterResponse
@@ -53,4 +53,22 @@ interface ApiService {
         val booking_time: String,
         val expiry_time: String? = null
     )
+}"""
+
+
+object RetrofitClient {
+    // 1. Thay link ngrok bằng link Render của bạn
+    private const val BASE_URL = "https://carparkingsmart.onrender.com/"
+
+    // 2. Không cần Interceptor cho ngrok nữa, dùng client mặc định cho nhanh
+    private val client = OkHttpClient.Builder().build()
+
+    val instance: ApiService by lazy {
+        val retrofit = Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+        retrofit.create(ApiService::class.java)
+    }
 }

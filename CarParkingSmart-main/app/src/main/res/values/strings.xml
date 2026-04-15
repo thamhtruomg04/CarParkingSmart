@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">⚡ EV Charging Finder</string>
+    <string name="app_name">Trạm Sạc Thông Minh</string>
     
     <!-- Search -->
     <string name="search_hint">Tìm trạm sạc gần bạn...</string>
