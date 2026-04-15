@@ -7,11 +7,16 @@ django.setup()
 from django.contrib.auth.models import User
 
 username = 'truongtv'
-email = 'truong.vu@tsg.net.vn' # Email của bạn
-password = 'MatKhauCuaBan123' # Thay bằng mật khẩu bạn muốn
+email = 'truong.vu@tsg.net.vn' 
+password = 'Hanoi@12345' 
 
-if not User.objects.filter(username=username).exists():
-    User.objects.create_superuser(username, email, password)
+user, created = User.objects.get_or_create(username=username, defaults={'email': email})
+user.set_password(password) # Ép cập nhật mật khẩu mới nhất trong code
+user.is_superuser = True
+user.is_staff = True
+user.save()
+
+if created:
     print("Admin user created successfully!")
 else:
-    print("Admin user already exists.")
+    print("Admin user password updated successfully!")
