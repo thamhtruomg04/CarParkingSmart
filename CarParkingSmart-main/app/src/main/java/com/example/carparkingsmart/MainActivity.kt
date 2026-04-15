@@ -293,45 +293,41 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun guilenServerDatCho(slot: ChargingSlot) {
-        // 1. Lấy thông tin người dùng từ SharedPreferences (Phải khớp tên "UserPrefs")
-        val sharedPref = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+    // 1. Lấy thông tin người dùng từ SharedPreferences
+    val sharedPref = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+    val currentUserEmail = sharedPref.getString("user_email", "Guest") ?: "Guest"
 
-        // Lấy "user_email" đã lưu từ LoginActivity, nếu không có thì để "Khách"
-        val currentUserEmail = sharedPref.getString("user_email", "Guest") ?: "Guest"
+    // 2. Thực hiện gọi API bằng Coroutine dùng RetrofitClient đã có sẵn
+    lifecycleScope.launch {
+        try {
+            // Dùng RetrofitClient.instance để tự động lấy link Render mới nhất
+            // stationId nên lấy từ currentPlace (trạm người dùng đang xem)
+            val targetStationId = currentPlace?.id ?: 1 
 
-        // 2. Cấu hình Retrofit (Dùng link ngrok của bạn từ settings.py)
-        val retrofit = Retrofit.Builder()
-            .baseUrl("https://adrianne-jaggier-aiko.ngrok-free.dev/")
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
+            val response = RetrofitClient.instance.createBooking(
+                userId = currentUserEmail,
+                stationId = targetStationId, 
+                slotId = slot.id,
+                status = "Quick_Booking"
+            )
 
-        val apiService = retrofit.create(com.example.carparkingsmart.api.ApiService::class.java)
-
-        // 3. Thực hiện gọi API bằng Coroutine
-        lifecycleScope.launch {
-            try {
-                // userId gửi lên Django bây giờ sẽ là Email người dùng
-                val response = apiService.createBooking(
-                    userId = currentUserEmail,
-                    stationId = 1,      // ID trạm sạc hiện tại
-                    slotId = slot.id,   // ID của ô đỗ đã chọn (A1, B2...)
-                    status = "Quick_Booking"
-                )
-
-                if (response.isSuccessful) {
-                    Toast.makeText(this@MainActivity,
-                        "Thành công! Ô ${slot.slot_code} đã được giữ cho $currentUserEmail",
-                        Toast.LENGTH_LONG).show()
-                } else {
-                    // Nếu server trả về lỗi (ví dụ ô đã bị chiếm)
-                    Toast.makeText(this@MainActivity, "Ô này vừa mới có người đặt mất rồi!", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                // Lỗi kết nối, ngrok hết hạn, hoặc server sập
-                Toast.makeText(this@MainActivity, "Lỗi kết nối: ${e.message}", Toast.LENGTH_SHORT).show()
+            if (response.isSuccessful) {
+                Toast.makeText(this@MainActivity,
+                    "Thành công! Ô ${slot.slot_code} đã được giữ cho $currentUserEmail",
+                    Toast.LENGTH_LONG).show()
+                
+                // Sau khi đặt thành công, nên load lại dữ liệu để cập nhật số chỗ trống trên bản đồ
+                loadChargingStationsFromDB()
+            } else {
+                Toast.makeText(this@MainActivity, "Ô này vừa mới có người đặt mất rồi!", Toast.LENGTH_SHORT).show()
             }
+        } catch (e: Exception) {
+            // Lỗi kết nối hoặc lỗi Server Render
+            android.util.Log.e("API_ERROR", "Booking failed: ${e.message}")
+            Toast.makeText(this@MainActivity, "Lỗi kết nối Server: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
+}
 
     private fun setupMap() {
         // 1. Thiết lập nguồn bản đồ và các điều khiển cơ bản

@@ -5,20 +5,25 @@ import retrofit2.Response
 import retrofit2.http.*
 
 interface ApiService {
+    // Đăng ký tài khoản
     @POST("api/register/")
     suspend fun register(@Body user: RegisterRequest): RegisterResponse
 
+    // Đăng nhập lấy Token
     @POST("api/api-token-auth/")
     suspend fun login(@Body credentials: LoginRequest): LoginResponse
 
+    // Lấy danh sách trạm sạc
     @GET("api/stations/")
     suspend fun getStations(): List<StationResponse>
 
+    // Lấy danh sách ô sạc theo ID trạm sạc
     @GET("api/stations/{id}/slots/")
     suspend fun getSlots(
         @Path("id") stationId: Int
     ): Response<List<com.example.carparkingsmart.ChargingSlot>>
 
+    // Tạo đơn đặt chỗ mới
     @FormUrlEncoded
     @POST("api/bookings/")
     suspend fun createBooking(
@@ -28,6 +33,7 @@ interface ApiService {
         @Field("status") status: String
     ): Response<BookingResponse>
 
+    // Cập nhật trạng thái đặt chỗ
     @FormUrlEncoded
     @POST("api/bookings/{id}/update_status/")
     suspend fun updateBookingStatus(
@@ -35,6 +41,7 @@ interface ApiService {
         @Field("status") status: String
     ): Response<ResponseBody>
 
+    // Cấu trúc dữ liệu phản hồi cho Đặt chỗ
     data class BookingResponse(
         val id: Int,
         val user_id: String,
