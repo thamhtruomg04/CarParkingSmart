@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -82,7 +83,7 @@ WSGI_APPLICATION = 'server_parking.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
-
+"""
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -92,6 +93,14 @@ DATABASES = {
         'HOST': '127.0.0.1',
         'PORT': '5432',             
     }
+}"""
+
+DATABASES = {
+    'default': dj_database_url.config(
+    
+        default='postgresql://postgres:@127.0.0.1:5432/parking_db',
+        conn_max_age=600
+    )
 }
 
 
@@ -130,7 +139,15 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
-# settings.py
-ALLOWED_HOSTS = ['adrianne-jaggier-aiko.ngrok-free.dev', 'localhost', '127.0.0.1', '.ngrok-free.dev']
 
+#ALLOWED_HOSTS = ['adrianne-jaggier-aiko.ngrok-free.dev', 'localhost', '127.0.0.1', '.ngrok-free.dev']
+
+ALLOWED_HOSTS = [
+    'carparkingsmart.onrender.com',
+    'localhost',
+    '127.0.0.1',
+    '.onrender.com', 
+]
 CORS_ALLOW_ALL_ORIGINS = True
+
+CSRF_TRUSTED_ORIGINS = ['https://carparkingsmart.onrender.com']
