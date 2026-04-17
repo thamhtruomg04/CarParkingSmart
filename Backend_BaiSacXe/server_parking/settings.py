@@ -98,8 +98,7 @@ DATABASES = {
 
 DATABASES = {
     'default': dj_database_url.config(
-    
-        default='postgresql://postgres:@127.0.0.1:5432/parking_db',
+        default='postgresql://postgress:SOYgWaH80wEnBv14a7lhSziRpmujbyzf@dpg-d7fqnjjeo5us73f42ctg-a.singapore-postgres.render.com/parking_db_e3x1',
         conn_max_age=600
     )
 }
