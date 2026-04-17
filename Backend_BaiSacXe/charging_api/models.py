@@ -47,24 +47,20 @@ class Booking(models.Model):
         is_new = self.pk is None
         
         if is_new:
-            # Kiểm tra chỗ trống trước khi trừ
+            # Kiểm tra chỗ trống
             if self.station.available_slots <= 0:
                 raise ValidationError("Trạm sạc đã hết chỗ trống!")
             
-            # Thiết lập thông tin mặc định
-            self.expiry_time = timezone.now() + timedelta(seconds=15)
+            self.expiry_time = timezone.now() + timedelta(minutes=10)
             self.qr_code_data = f"PAYMENT_FOR_BOOKING_{self.user_id}_{timezone.now().timestamp()}"
             
-            # Trừ chỗ trống
-            self.station.available_slots -= 1
-            self.station.save()
         else:
-            # Logic khi cập nhật trạng thái
             old_booking = Booking.objects.get(pk=self.pk)
-            # Nếu chuyển sang Cancelled hoặc Completed thì hoàn lại chỗ trống
             if self.status in ['Cancelled', 'Completed'] and old_booking.status not in ['Cancelled', 'Completed']:
-                self.station.available_slots += 1
-                self.station.save()
+                # ✅ Chỉ cộng lại slot nếu booking trước đó đã được Confirmed (đã trừ slot)
+                if old_booking.status == 'Confirmed':
+                    self.station.available_slots += 1
+                    self.station.save()
 
         super().save(*args, **kwargs)
 
