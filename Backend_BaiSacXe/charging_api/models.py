@@ -47,38 +47,52 @@ class Booking(models.Model):
         is_new = self.pk is None
 
         if is_new:
+            # KIỂM TRA VÀ GIẢM available_slots NGAY KHI TẠO MỚI
             if self.station.available_slots <= 0:
                 raise ValidationError("Trạm sạc đã hết chỗ trống!")
+            
+            # Giảm số chỗ trống NGAY khi tạo Quick_Booking
+            self.station.available_slots -= 1
+            self.station.save()
+
             self.expiry_time = timezone.now() + timedelta(minutes=10)
             self.qr_code_data = f"PAYMENT_FOR_BOOKING_{self.user_id}_{timezone.now().timestamp()}"
             
-            # ✅ Đánh dấu slot là không còn trống
+            # Đánh dấu slot là không còn trống
             if self.slot:
                 self.slot.is_available = False
                 self.slot.save()
 
         else:
+            # Xử lý khi CẬP NHẬT booking đã tồn tại
             old_booking = Booking.objects.get(pk=self.pk)
+            
+            # Nếu chuyển từ Quick_Booking hoặc Confirmed sang Cancelled/Completed
             if self.status in ['Cancelled', 'Completed'] and old_booking.status not in ['Cancelled', 'Completed']:
-                # ✅ Trả lại slot khi hủy hoặc hoàn thành
+                # Trả lại slot
                 if self.slot:
                     self.slot.is_available = True
                     self.slot.save()
-                if old_booking.status == 'Confirmed':
-                    self.station.available_slots += 1
-                    self.station.save()
+                
+                # TRẢ LẠI available_slots
+                self.station.available_slots += 1
+                self.station.save()
 
         super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.user_id} - {self.station.name}"
 
-# --- ĐƯA SIGNAL RA NGOÀI CLASS ---
+
+# Signal xử lý khi xóa booking từ Admin
 @receiver(post_delete, sender=Booking)
 def restore_slot_on_delete(sender, instance, **kwargs):
-    # Khi xóa dòng trên Admin, số chỗ sẽ tự động cộng lại
-    station = instance.station
-    if instance.status not in ['Cancelled', 'Completed']: # Chỉ cộng nếu booking chưa ở trạng thái kết thúc
-        station.available_slots += 1
-        station.save()
-
+    """Trả lại slot khi xóa booking từ Admin"""
+    if instance.slot:
+        instance.slot.is_available = True
+        instance.slot.save()
+    
+    # Chỉ cộng lại nếu booking chưa ở trạng thái kết thúc
+    if instance.status not in ['Cancelled', 'Completed']:
+        instance.station.available_slots += 1
+        instance.station.save()

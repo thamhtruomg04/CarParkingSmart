@@ -93,16 +93,16 @@ class BookingViewSet(viewsets.ModelViewSet):
     @decorators.action(detail=True, methods=['post'])
     def confirm_payment(self, request, pk=None):
         """
-        Xác nhận thanh toán thành công + trừ 1 slot
+        Xác nhận thanh toán thành công (KHÔNG trừ slot vì đã trừ lúc tạo Quick_Booking)
         URL: POST /api/bookings/{booking_id}/confirm_payment/
         """
         try:
             booking = Booking.objects.get(pk=pk)
         except Booking.DoesNotExist:
             return Response({"error": "Không tìm thấy booking!"}, 
-                          status=status.HTTP_404_NOT_FOUND)
+                        status=status.HTTP_404_NOT_FOUND)
 
-        # Đã confirmed rồi thì không trừ nữa
+        # Đã confirmed rồi thì không làm gì
         if booking.status == "Confirmed":
             return Response({
                 "message": "Đơn đặt chỗ đã được xác nhận trước đó."
@@ -114,24 +114,15 @@ class BookingViewSet(viewsets.ModelViewSet):
                 "error": "Chỉ có thể xác nhận thanh toán cho đơn Quick_Booking"
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # === Trừ slot ===
-        station = booking.station
-        if station.available_slots <= 0:
-            return Response({
-                "error": "Trạm sạc đã hết chỗ!"
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        station.available_slots -= 1
-        station.save()
-
-        # === Cập nhật booking ===
+        # ✅ KHÔNG CẦN TRỪ SLOT Ở ĐÂY NỮA (đã trừ lúc tạo Quick_Booking trong models.py)
+        # Chỉ cần chuyển trạng thái
         booking.status = "Confirmed"
-        booking.save()
+        booking.save()  # ← Hàm save() trong models.py sẽ KHÔNG trừ thêm vì is_new=False
 
         return Response({
-            "message": "Thanh toán thành công! Đã trừ 1 chỗ sạc.",
+            "message": "✅ Thanh toán thành công! Chỗ sạc đã được giữ.",
             "booking_id": booking.id,
-            "station": station.name,
-            "remaining_slots": station.available_slots
+            "station": booking.station.name,
+            "remaining_slots": booking.station.available_slots
         }, status=status.HTTP_200_OK)
 
