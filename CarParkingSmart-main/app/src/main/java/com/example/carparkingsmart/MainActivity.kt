@@ -568,7 +568,7 @@ class MainActivity : AppCompatActivity() {
                             }
 
                             showDirections()
-                            startBookingTimer(15000L, parking.name)
+                            startBookingTimer(600_000L, parking.name)
                         } else {
                             Toast.makeText(this@MainActivity, "Thất bại: Trạm có thể đã hết chỗ!", Toast.LENGTH_SHORT).show()
                         }

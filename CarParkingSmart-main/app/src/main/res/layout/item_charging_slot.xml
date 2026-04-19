@@ -1,19 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="60dp"
-    android:layout_height="60dp"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_margin="4dp"
     android:orientation="vertical"
     android:gravity="center"
-    android:margin="4dp"
+    android:padding="8dp"
     android:background="@drawable/slot_background"
-    android:layout_margin="4dp">
+    android:minWidth="56dp"
+    android:minHeight="56dp">
 
     <TextView
         android:id="@+id/tv_slot_code"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:text="A1"
         android:textSize="14sp"
         android:textStyle="bold"
-        android:gravity="center" />
+        android:textColor="#1B5E20"/>
 
 </LinearLayout>
