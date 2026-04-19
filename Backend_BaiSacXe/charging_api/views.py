@@ -114,13 +114,11 @@ class BookingViewSet(viewsets.ModelViewSet):
                 "error": "Chỉ có thể xác nhận thanh toán cho đơn Quick_Booking"
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # ✅ KHÔNG CẦN TRỪ SLOT Ở ĐÂY NỮA (đã trừ lúc tạo Quick_Booking trong models.py)
-        # Chỉ cần chuyển trạng thái
         booking.status = "Confirmed"
-        booking.save()  # ← Hàm save() trong models.py sẽ KHÔNG trừ thêm vì is_new=False
+        booking.save() 
 
         return Response({
-            "message": "✅ Thanh toán thành công! Chỗ sạc đã được giữ.",
+            "message": "Thanh toán thành công! Chỗ sạc đã được giữ.",
             "booking_id": booking.id,
             "station": booking.station.name,
             "remaining_slots": booking.station.available_slots
