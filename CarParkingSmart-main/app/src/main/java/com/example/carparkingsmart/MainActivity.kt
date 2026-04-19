@@ -125,6 +125,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var tvLiveOccupancy: TextView
 
+    private var checkPaymentHandler = Handler(Looper.getMainLooper())
+
     private var currentSelectedSlotId: Int = 0
 
     private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
@@ -274,57 +276,68 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnConfirm.setOnClickListener {
-            selectedSlot?.let { slot ->
-                // 1. Lưu lại ID ô đã chọn để gửi lên server
-                currentSelectedSlotId = slot.id
+    selectedSlot?.let { slot ->
+        // 1. Lưu lại ID ô đã chọn
+        currentSelectedSlotId = slot.id
 
-                // 2. Gửi lệnh đặt chỗ lên Server Django (để giữ chỗ tạm thời)
-                guilenServerDatCho(slot)
+        // 2. Gửi lệnh đặt chỗ lên Server (Hàm này sẽ chịu trách nhiệm hiện QR nếu thành công)
+        guilenServerDatCho(slot)
 
-                // 3. Đóng sơ đồ chọn ô
-                dialog.dismiss()
-
-                // 4. MỞ CÁI NÀY: Hiện mã QR thanh toán (Cái hàm bạn vừa gửi)
-                showBookingPayment(currentPlace?.name ?: "Trạm sạc")
-            }
-        }
+        // 3. Đóng sơ đồ chọn ô
+        dialog.dismiss()
+        
+    }
+}
 
         dialog.show()
     }
 
     private fun guilenServerDatCho(slot: ChargingSlot) {
-    // 1. Lấy thông tin người dùng từ SharedPreferences
     val sharedPref = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
     val currentUserEmail = sharedPref.getString("user_email", "Guest") ?: "Guest"
 
-    // 2. Thực hiện gọi API bằng Coroutine dùng RetrofitClient đã có sẵn
     lifecycleScope.launch {
         try {
-            // Dùng RetrofitClient.instance để tự động lấy link Render mới nhất
-            // stationId nên lấy từ currentPlace (trạm người dùng đang xem)
             val targetStationId = currentPlace?.id ?: 1 
 
             val response = RetrofitClient.instance.createBooking(
                 userId = currentUserEmail,
                 stationId = targetStationId, 
                 slotId = slot.id,
-                status = "Quick_Booking"
+                status = "Quick_Booking" // Khớp với STATUS_CHOICES trong Django
             )
 
             if (response.isSuccessful) {
-                Toast.makeText(this@MainActivity,
-                    "Thành công! Ô ${slot.slot_code} đã được giữ cho $currentUserEmail",
-                    Toast.LENGTH_LONG).show()
-                
-                // Sau khi đặt thành công, nên load lại dữ liệu để cập nhật số chỗ trống trên bản đồ
+                val bookingResponse = response.body()
+                currentBookingId = bookingResponse?.id ?: -1
+
+                // Cập nhật bản đồ chạy nền
                 loadChargingStationsFromDB()
+
+                // ✅ Bắt buộc chạy trên UI thread để dialog hiện được
+                runOnUiThread {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Đã giữ ô ${slot.slot_code}. Vui lòng thanh toán!",
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                    // Hiện QR dialog
+                    showBookingPayment(currentPlace?.name ?: "Trạm sạc")
+                }
+
             } else {
-                Toast.makeText(this@MainActivity, "Ô này vừa mới có người đặt mất rồi!", Toast.LENGTH_SHORT).show()
+                val errorBody = response.errorBody()?.string()
+                android.util.Log.e("API_ERROR", "Lỗi đặt chỗ: $errorBody")
+                Toast.makeText(
+                    this@MainActivity,
+                    "Không thể đặt chỗ. Có thể trạm đã hết chỗ!",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         } catch (e: Exception) {
-            // Lỗi kết nối hoặc lỗi Server Render
-            android.util.Log.e("API_ERROR", "Booking failed: ${e.message}")
-            Toast.makeText(this@MainActivity, "Lỗi kết nối Server: ${e.message}", Toast.LENGTH_SHORT).show()
+            android.util.Log.e("API_ERROR", "Lỗi kết nối: ${e.message}")
+            Toast.makeText(this@MainActivity, "Lỗi kết nối Server!", Toast.LENGTH_SHORT).show()
         }
     }
 }
@@ -573,48 +586,40 @@ class MainActivity : AppCompatActivity() {
     private var bookingCountDownTimer: android.os.CountDownTimer? = null
 
     private fun startBookingTimer(duration: Long, stationName: String) {
-        bookingCountDownTimer?.cancel() // Hủy cái cũ nếu có
+    bookingCountDownTimer?.cancel()
 
-        // Truyền vào 15000 (tương đương 15 giây) thay vì duration nếu bạn muốn ép buộc test nhanh
-        val testDuration = 15000L
+    bookingCountDownTimer = object : android.os.CountDownTimer(duration, 1000) {
+        override fun onTick(millisUntilFinished: Long) {
+            val minutes = (millisUntilFinished / 1000) / 60
+            val seconds = (millisUntilFinished / 1000) % 60
+            tvPlaceRating.text = "⏳ Giữ chỗ tại $stationName: ${String.format("%02d:%02d", minutes, seconds)}"
+            tvPlaceRating.setTextColor(android.graphics.Color.RED)
+        }
 
-        bookingCountDownTimer = object : android.os.CountDownTimer(testDuration, 1000) {
-            override fun onTick(millisUntilFinished: Long) {
-                val minutes = (millisUntilFinished / 1000) / 60
-                val seconds = (millisUntilFinished / 1000) % 60
+        override fun onFinish() {
+            tvPlaceRating.text = "ĐÃ HẾT HẠN GIỮ CHỖ"
+            tvPlaceRating.setTextColor(android.graphics.Color.GRAY)
 
-                // Cập nhật giao diện đếm ngược
-                tvPlaceRating.text = "TEST 15s - Giữ chỗ tại $stationName: ${String.format("%02d:%02d", minutes, seconds)}"
-                tvPlaceRating.setTextColor(android.graphics.Color.RED)
-            }
-
-            override fun onFinish() {
-                tvPlaceRating.text = "ĐÃ HẾT HẠN GIỮ CHỖ"
-                tvPlaceRating.setTextColor(android.graphics.Color.GRAY)
-
-                if (currentBookingId != -1) { // Kiểm tra ID trước khi gọi
-                    lifecycleScope.launch {
-                        try {
-                            // Gọi API chuyển trạng thái sang Cancelled trên Django
-                            RetrofitClient.instance.updateBookingStatus(currentBookingId, "Cancelled")
-
-                            loadChargingStationsFromDB()
-                            displayParkingLots()
-
-                            Toast.makeText(this@MainActivity, "Đã tự động hủy giữ chỗ!", Toast.LENGTH_SHORT).show()
-                            currentBookingId = -1 // Reset lại ID sau khi hủy
-                        } catch (e: Exception) {
-                            android.util.Log.e("TIMER_ERROR", "Lỗi: ${e.message}")
-                        }
+            if (currentBookingId != -1) {
+                lifecycleScope.launch {
+                    try {
+                        RetrofitClient.instance.updateBookingStatus(currentBookingId, "Cancelled")
+                        loadChargingStationsFromDB()
+                        displayParkingLots()
+                        Toast.makeText(this@MainActivity, "Đã tự động hủy giữ chỗ!", Toast.LENGTH_SHORT).show()
+                        currentBookingId = -1
+                    } catch (e: Exception) {
+                        android.util.Log.e("TIMER_ERROR", "Lỗi: ${e.message}")
                     }
                 }
-
-                val btnBookNow = findViewById<Button>(R.id.btn_book_parking)
-                btnBookNow.text = "Đặt lại ngay"
-                btnBookNow.isEnabled = true
             }
-        }.start()
-    }
+
+            val btnBookNow = findViewById<Button>(R.id.btn_book_parking)
+            btnBookNow.text = "Đặt lại ngay"
+            btnBookNow.isEnabled = true
+        }
+    }.start()
+}
 
     private fun findNearestChargingStation() {
         myLocationOverlay?.myLocation?.let { myLoc ->
@@ -1164,118 +1169,218 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showBookingPayment(placeName: String) {
-        // 1. Inflate Layout
-        val dialogView = layoutInflater.inflate(R.layout.dialog_payment_qr, null)
-        val imgQR = dialogView.findViewById<ImageView>(R.id.img_qr_code)
-        val tvTimerInDialog = dialogView.findViewById<TextView>(R.id.tv_payment_timer)
+    val dialogView = layoutInflater.inflate(R.layout.dialog_payment_qr, null)
+    val imgQR = dialogView.findViewById<ImageView>(R.id.img_qr_code)
+    val tvTimerInDialog = dialogView.findViewById<TextView>(R.id.tv_payment_timer)
+    val btnCancel = dialogView.findViewById<Button>(R.id.btn_cancel_payment)
+    val btnConfirmPaid = dialogView.findViewById<Button>(R.id.btn_confirm_paid) 
 
-        if (imgQR == null || tvTimerInDialog == null) {
-            Toast.makeText(this, "Lỗi Layout Dialog!", Toast.LENGTH_SHORT).show()
-            return
-        }
+    if (imgQR == null || tvTimerInDialog == null) return
 
-        // 2. Tạo link QR (Dùng ID đơn hàng sẽ tốt hơn dùng tên trạm)
-        val qrUrl = "https://img.vietqr.io/image/ICB-108876696755-compact.png?amount=50000&addInfo=DatCho_${currentBookingId}"
+    val qrUrl = "https://img.vietqr.io/image/ICB-108876696755-compact.png" +
+                "?amount=50000&addInfo=DatCho_${currentBookingId}"
+    Glide.with(this).load(qrUrl).into(imgQR)
 
-        Glide.with(this).load(qrUrl).into(imgQR)
+    // Dùng AlertDialog (không phải BottomSheetDialog)
+    val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+        .setView(dialogView)
+        .setCancelable(false)
+        .create()
 
-        // 3. Khởi tạo Dialog
-        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
-            .setView(dialogView)
-            .setCancelable(false)
-            .setPositiveButton("Tôi đã chuyển khoản") { d, _ ->
-                xacNhanThanhToan(currentBookingId)
-                d.dismiss()
-            }
-            .setNegativeButton("Hủy") { d, _ ->
-                bookingCountDownTimer?.cancel()
-                // Trả lại UI ban đầu nếu hủy
-                tvPlaceRating.text = "⭐ 4.8"
-                tvPlaceRating.setTextColor(Color.parseColor("#4CAF50"))
-                d.dismiss()
-            }
-            .create()
-
-        dialog.show()
-
-        // 4. LOGIC ĐẾM NGƯỢC (Sửa tại đây)
-        bookingCountDownTimer?.cancel() // Xóa timer cũ nếu có
-
-        // 1800000ms = 30 phút
-        bookingCountDownTimer = object : android.os.CountDownTimer(1800000, 1000) {
-            override fun onTick(millisUntilFinished: Long) {
-                val minutes = (millisUntilFinished / 1000) / 60
-                val seconds = (millisUntilFinished / 1000) % 60
-                val timeString = String.format("%02d:%02d", minutes, seconds)
-
-                // Cập nhật vào TextView trong Dialog (nếu dialog còn đang hiện)
-                if (dialog.isShowing) {
-                    tvTimerInDialog.text = "Hiệu lực thanh toán: $timeString"
-                }
-
-                // Cập nhật vào tvPlaceRating ở BottomSheet (Dùng runOnUiThread cho chắc chắn)
-                runOnUiThread {
-                    if (::tvPlaceRating.isInitialized) {
-                        tvPlaceRating.text = "⏳ Giữ chỗ: $timeString"
-                        tvPlaceRating.setTextColor(Color.RED)
-                    }
-                }
-            }
-
-            override fun onFinish() {
-                if (dialog.isShowing) dialog.dismiss()
-                handleBookingExpired()
-            }
-        }.start()
+    btnCancel?.setOnClickListener {
+        bookingCountDownTimer?.cancel()
+        stopAutoCheckPayment()
+        dialog.dismiss()
+        handleBookingExpired()
     }
 
-    private fun xacNhanThanhToan(bookingId: Int) {
-        if (bookingId == -1) return
+    btnConfirmPaid?.setOnClickListener {
+    btnConfirmPaid.isEnabled = false
+    btnConfirmPaid.text = "Đang xác nhận..."
 
-        lifecycleScope.launch {
-            try {
-                val response = RetrofitClient.instance.updateBookingStatus(bookingId, "Confirmed")
+    lifecycleScope.launch {
+        try {
+            val response = RetrofitClient.instance.confirmBookingAndSubtractSlot(currentBookingId)
+            runOnUiThread {
+                stopAutoCheckPayment()
                 bookingCountDownTimer?.cancel()
+                dialog.dismiss()
 
-                // VỊ TRÍ SỬA 3: Mở khóa nút X sau khi thanh toán xong
+                if (response.isSuccessful) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "✅ Xác nhận thành công! Chỗ sạc đã được giữ.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "⚠️ Chưa xác nhận được thanh toán (${response.code()})",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    btnConfirmPaid.isEnabled = true
+                    btnConfirmPaid.text = "Tôi đã chuyển khoản"
+                }
+
                 currentBookingId = -1
-
+                tvPlaceRating.setTextColor(Color.parseColor("#4CAF50"))
+                bottomSheetBehavior.isHideable = true
                 loadChargingStationsFromDB()
-                Toast.makeText(this@MainActivity, "Xác nhận thành công!", Toast.LENGTH_LONG).show()
-
-                runOnUiThread {
-                    tvPlaceRating.text = "✅ Đã xác nhận"
-                    tvPlaceRating.setTextColor(Color.parseColor("#4CAF50"))
-                    bottomSheetBehavior.isHideable = true
-                }
-            } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "Lỗi kết nối Server!", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            runOnUiThread {
+                Toast.makeText(this@MainActivity, "Lỗi kết nối!", Toast.LENGTH_SHORT).show()
+                btnConfirmPaid.isEnabled = true
+                btnConfirmPaid.text = "Tôi đã chuyển khoản"
             }
         }
     }
+}
 
-    private fun handleBookingExpired() {
-        if (currentBookingId != -1) {
+    dialog.show()
+    bookingCountDownTimer?.cancel()
+    stopAutoCheckPayment() // Dừng polling cũ nếu có
+
+    // Đếm ngược 10 phút
+    bookingCountDownTimer = object : android.os.CountDownTimer(600_000L, 1000) {
+        override fun onTick(millisUntilFinished: Long) {
+            val totalSeconds = millisUntilFinished / 1000
+            val minutes = totalSeconds / 60
+            val seconds = totalSeconds % 60
+            val timeString = String.format("%02d:%02d", minutes, seconds)
+            tvTimerInDialog.text = "Vui lòng thanh toán trong: $timeString"
+            tvPlaceRating.text = "⏳ Chờ thanh toán: $timeString"
+            tvPlaceRating.setTextColor(Color.RED)
+        }
+
+        override fun onFinish() {
+            if (dialog.isShowing) dialog.dismiss()
+            stopAutoCheckPayment()
+            handleBookingExpired()
+        }
+    }.start()
+
+    // Bắt đầu polling kiểm tra thanh toán, truyền đúng AlertDialog
+    startPollingPayment(currentBookingId, dialog)
+}
+
+    private fun startPollingPayment(
+        bookingId: Int,
+        dialog: androidx.appcompat.app.AlertDialog
+    ) {
+        lateinit var checkRunnable: Runnable
+        checkRunnable = Runnable {
+            if (bookingId == -1) return@Runnable
+
             lifecycleScope.launch {
                 try {
-                    RetrofitClient.instance.updateBookingStatus(currentBookingId, "Cancelled")
+                    val response = RetrofitClient.instance.getBookingDetail(bookingId)
+                    if (response.isSuccessful) {
+                        val booking = response.body()
+                        when (booking?.status) {
+                            "Confirmed" -> {
+                                subtractSlotFromServer(bookingId, dialog)
+                            }
+                            "Cancelled" -> {
+                                stopAutoCheckPayment()
+                                if (dialog.isShowing) dialog.dismiss()
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "Đặt chỗ đã bị hủy.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                            else -> {
+                                checkPaymentHandler.postDelayed(checkRunnable, 5000)
+                            }
+                        }
+                    } else {
+                        checkPaymentHandler.postDelayed(checkRunnable, 5000)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("PAYMENT_CHECK", "Lỗi: ${e.message}")
+                    checkPaymentHandler.postDelayed(checkRunnable, 5000)
+                }
+            }
+        }
+        checkPaymentHandler.post(checkRunnable)
+    }
 
-                    // VỊ TRÍ SỬA 2: Đưa về -1 để nút X hoạt động lại
+    // ✅ Gọi confirm_payment/ để trừ slot, sau đó cập nhật UI
+    private fun subtractSlotFromServer(
+        bookingId: Int,
+        dialog: androidx.appcompat.app.AlertDialog
+    ) {
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.confirmBookingAndSubtractSlot(bookingId)
+                runOnUiThread {
+                    stopAutoCheckPayment()
+                    bookingCountDownTimer?.cancel()
+                    if (dialog.isShowing) dialog.dismiss()
+
+                    if (response.isSuccessful) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "✅ Thanh toán thành công! Đã trừ 1 chỗ sạc.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    } else {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Thanh toán ghi nhận nhưng không trừ được slot (${response.code()})",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+
+                    // Reset trạng thái UI
                     currentBookingId = -1
-
-                    loadChargingStationsFromDB()
-                    Toast.makeText(this@MainActivity, "Hết thời gian! Nút xóa chỉ đường đã có hiệu lực.", Toast.LENGTH_LONG).show()
-
-                    tvPlaceRating.text = "⭐ 4.8"
                     tvPlaceRating.setTextColor(Color.parseColor("#4CAF50"))
                     bottomSheetBehavior.isHideable = true
-
-                } catch (e: Exception) {
-                    android.util.Log.e("API_ERROR", "Lỗi: ${e.message}")
+                    loadChargingStationsFromDB()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("SLOT_ERROR", "Không trừ được slot: ${e.message}")
+                runOnUiThread {
+                    stopAutoCheckPayment()
+                    if (dialog.isShowing) dialog.dismiss()
+                    Toast.makeText(this@MainActivity, "Lỗi kết nối khi trừ slot!", Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
+
+    private fun stopAutoCheckPayment() {
+        checkPaymentHandler.removeCallbacksAndMessages(null)
+    }
+
+
+
+    private fun handleBookingExpired() {
+    if (currentBookingId == -1) return  // ← Thêm dòng này để tránh gọi 2 lần
+    bookingCountDownTimer?.cancel()
+    stopAutoCheckPayment()
+
+    val expiredId = currentBookingId
+    currentBookingId = -1  // ← Reset NGAY lập tức trước khi gọi API
+
+    lifecycleScope.launch {
+        try {
+            RetrofitClient.instance.updateBookingStatus(expiredId, "Cancelled")
+        } catch (e: Exception) {
+            android.util.Log.e("API_ERROR", "Lỗi khi tự động hủy: ${e.message}")
+        }
+        runOnUiThread {
+            loadChargingStationsFromDB()
+            Toast.makeText(this@MainActivity,
+                "Hết thời gian thanh toán! Đặt chỗ đã tự động hủy.",
+                Toast.LENGTH_LONG).show()
+            tvPlaceRating.text = "⭐ 4.8"
+            tvPlaceRating.setTextColor(Color.parseColor("#4CAF50"))
+            bottomSheetBehavior.isHideable = true
+        }
+    }
+}
 
     private fun showDirections() {
         currentPlace?.let { place ->

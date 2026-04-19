@@ -1,4 +1,4 @@
-package com.example.carparkingsmart // Kiểm tra lại tên package của bạn
+package com.example.carparkingsmart
 
 import android.graphics.Color
 import android.view.LayoutInflater
@@ -6,9 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.card.MaterialCardView
 
-// Model đơn giản để hứng dữ liệu từ Django
 data class ChargingSlot(
     val id: Int,
     val slot_code: String,
@@ -17,18 +15,16 @@ data class ChargingSlot(
 
 class SlotAdapter(
     private val slots: List<ChargingSlot>,
-    private val onSlotSelected: (ChargingSlot) -> Unit // Callback khi click
+    private val onSlotSelected: (ChargingSlot) -> Unit
 ) : RecyclerView.Adapter<SlotAdapter.SlotViewHolder>() {
 
     private var selectedPosition = -1
 
-    class SlotViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        val card: MaterialCardView = view.findViewById(R.id.card_slot)
-        val text: TextView = view.findViewById(R.id.tv_slot_code)
+    inner class SlotViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        val tvSlotCode: TextView = itemView.findViewById(R.id.tv_slot_code)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SlotViewHolder {
-        // Sử dụng file item_charging_slot.xml mà chúng ta đã nói ở bước trước
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_charging_slot, parent, false)
         return SlotViewHolder(view)
@@ -36,35 +32,41 @@ class SlotAdapter(
 
     override fun onBindViewHolder(holder: SlotViewHolder, position: Int) {
         val slot = slots[position]
-        holder.text.text = slot.slot_code
+        holder.tvSlotCode.text = slot.slot_code
 
-        // 1. Xử lý màu sắc dựa trên trạng thái Is_Available và Selected
-        if (!slot.is_available) {
-            holder.card.setCardBackgroundColor(Color.LTGRAY) // Màu xám: Đã có xe
-            holder.text.setTextColor(Color.DKGRAY)
-            holder.itemView.isEnabled = false
-        } else {
-            holder.itemView.isEnabled = true
-            holder.text.setTextColor(Color.WHITE)
-
-            if (selectedPosition == position) {
-                holder.card.setCardBackgroundColor(Color.parseColor("#FFD600")) // Màu Vàng: Đang chọn
-                holder.text.setTextColor(Color.BLACK)
-            } else {
-                holder.card.setCardBackgroundColor(Color.parseColor("#4CAF50")) // Màu Xanh: Ô trống
+        when {
+            // ✅ Ô đã bị đặt — làm mờ, không cho chọn
+            !slot.is_available -> {
+                holder.itemView.setBackgroundColor(Color.parseColor("#CCCCCC"))
+                holder.tvSlotCode.setTextColor(Color.parseColor("#888888"))
+                holder.itemView.alpha = 0.5f
+                holder.itemView.isClickable = false
+                holder.itemView.isEnabled = false
+            }
+            // ✅ Ô đang được chọn
+            position == selectedPosition -> {
+                holder.itemView.setBackgroundColor(Color.parseColor("#4CAF50"))
+                holder.tvSlotCode.setTextColor(Color.WHITE)
+                holder.itemView.alpha = 1f
+                holder.itemView.isClickable = true
+                holder.itemView.isEnabled = true
+            }
+            // ✅ Ô trống bình thường
+            else -> {
+                holder.itemView.setBackgroundColor(Color.parseColor("#E8F5E9"))
+                holder.tvSlotCode.setTextColor(Color.parseColor("#1B5E20"))
+                holder.itemView.alpha = 1f
+                holder.itemView.isClickable = true
+                holder.itemView.isEnabled = true
             }
         }
 
-        // 2. Xử lý sự kiện Click
         holder.itemView.setOnClickListener {
-            val previousSelected = selectedPosition
-            selectedPosition = holder.bindingAdapterPosition
-
-            // Làm mới 2 ô: ô cũ và ô vừa chọn để đổi màu
-            notifyItemChanged(previousSelected)
+            if (!slot.is_available) return@setOnClickListener
+            val oldPosition = selectedPosition
+            selectedPosition = position
+            notifyItemChanged(oldPosition)
             notifyItemChanged(selectedPosition)
-
-            // Gửi dữ liệu ô đã chọn về cho Activity
             onSlotSelected(slot)
         }
     }

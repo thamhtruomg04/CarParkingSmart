@@ -1,16 +1,19 @@
-<com.google.android.material.card.MaterialCardView
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:id="@+id/card_slot"
-    android:layout_width="match_parent"
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="60dp"
     android:layout_height="60dp"
-    android:layout_margin="4dp"
-    app:cardCornerRadius="8dp">
+    android:orientation="vertical"
+    android:gravity="center"
+    android:margin="4dp"
+    android:background="@drawable/slot_background"
+    android:layout_margin="4dp">
 
     <TextView
         android:id="@+id/tv_slot_code"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:gravity="center"
-        android:textStyle="bold" />
-</com.google.android.material.card.MaterialCardView>
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:gravity="center" />
+
+</LinearLayout>

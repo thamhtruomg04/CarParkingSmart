@@ -41,6 +41,18 @@ interface ApiService {
         @Field("status") status: String
     ): Response<ResponseBody>
 
+
+    @GET("api/bookings/{id}/")
+    suspend fun getBookingDetail(
+        @Path("id") bookingId: Int
+    ): Response<BookingResponse>
+
+    // Sửa lại tên cho nhất quán — dùng 1 cái duy nhất
+    @POST("api/bookings/{id}/confirm_payment/")
+    suspend fun confirmBookingAndSubtractSlot(
+        @Path("id") bookingId: Int
+    ): Response<ResponseBody>
+
     // Cấu trúc dữ liệu phản hồi cho Đặt chỗ
     data class BookingResponse(
         val id: Int,
