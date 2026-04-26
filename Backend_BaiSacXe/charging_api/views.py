@@ -23,7 +23,6 @@ class ChargingStationViewSet(viewsets.ModelViewSet):
     queryset = ChargingStation.objects.all()
     serializer_class = ChargingStationSerializer
 
-    # --- ĐOẠN SỬA QUAN TRỌNG NHẤT: Thêm Action để Android tải Slots ---
     @decorators.action(detail=True, methods=['get'])
     def slots(self, request, pk=None):
         """
@@ -92,10 +91,6 @@ class BookingViewSet(viewsets.ModelViewSet):
 
     @decorators.action(detail=True, methods=['post'])
     def confirm_payment(self, request, pk=None):
-        """
-        Xác nhận thanh toán thành công (KHÔNG trừ slot vì đã trừ lúc tạo Quick_Booking)
-        URL: POST /api/bookings/{booking_id}/confirm_payment/
-        """
         try:
             booking = Booking.objects.get(pk=pk)
         except Booking.DoesNotExist:

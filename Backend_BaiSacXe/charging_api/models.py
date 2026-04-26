@@ -9,8 +9,8 @@ class ChargingStation(models.Model):
     name = models.CharField(max_length=255, verbose_name="Tên trạm")
     ward = models.CharField(max_length=100, verbose_name="Phường/Xã", default="Khác")
     address = models.TextField(verbose_name="Địa chỉ")
-    latitude = models.DecimalField(max_digits=12, decimal_places=7, null=True, blank=True)
-    longitude = models.DecimalField(max_digits=12, decimal_places=7, null=True, blank=True)
+    latitude = models.DecimalField(max_digits=20, decimal_places=15, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=20, decimal_places=15, null=True, blank=True)
     total_slots = models.IntegerField(default=0)
     available_slots = models.IntegerField(default=0)
 
@@ -25,6 +25,7 @@ class ChargingSlot(models.Model):
 
     def __str__(self):
         return f"{self.station.name} - {self.slot_code}" 
+
 class Booking(models.Model):
     STATUS_CHOICES = [
         ('Quick_Booking', 'Đang giữ chỗ 10p'),
