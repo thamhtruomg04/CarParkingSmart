@@ -13,6 +13,31 @@ class ChargingStation(models.Model):
     longitude = models.DecimalField(max_digits=20, decimal_places=14, null=True, blank=True)
     total_slots = models.IntegerField(default=0)
     available_slots = models.IntegerField(default=0)
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        
+        # Nếu là trạm mới, mặc định chỗ trống = tổng số chỗ
+        if is_new:
+            self.available_slots = self.total_slots
+            
+        super().save(*args, **kwargs)
+
+        # LOGIC TỰ ĐỘNG TẠO SLOT (A1, A2... B1, B2...)
+        # Chỉ chạy khi trạm mới được tạo và có số lượng total_slots > 0
+        if is_new and self.total_slots > 0:
+            new_slots = []
+            for i in range(1, self.total_slots + 1):
+                # Cứ 10 chỗ thì nhảy sang một chữ cái mới (A, B, C...)
+                # ASCII 65 là 'A', 66 là 'B'...
+                row_char = chr(65 + (i - 1) // 10) 
+                # Số thứ tự từ 1 đến 10 trong mỗi hàng
+                num = (i - 1) % 10 + 1
+                slot_code = f"{row_char}{num}"
+                
+                new_slots.append(ChargingSlot(station=self, slot_code=slot_code))
+            
+            # Dùng bulk_create để lưu tất cả một lần cho nhanh
+            ChargingSlot.objects.bulk_create(new_slots)
 
     def __str__(self):
         return self.name
