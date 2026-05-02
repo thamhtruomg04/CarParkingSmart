@@ -119,3 +119,26 @@ class BookingViewSet(viewsets.ModelViewSet):
             "remaining_slots": booking.station.available_slots
         }, status=status.HTTP_200_OK)
 
+    @decorators.action(detail=False, methods=['get'])
+    def booked_hours(self, request):
+        """
+        GET /api/bookings/booked_hours/?station_id=1&slot_id=2
+        Trả về list giờ đã bị đặt trong ngày hôm nay
+        """
+        station_id = request.query_params.get('station_id')
+        slot_id    = request.query_params.get('slot_id')
+
+        if not station_id or not slot_id:
+            return Response({"error": "Thiếu station_id hoặc slot_id"}, status=400)
+
+        today = timezone.now().date()
+
+        booked = Booking.objects.filter(
+            station_id=station_id,
+            slot_id=slot_id,
+            status__in=['Quick_Booking', 'Confirmed'],
+            booking_time__date=today
+        ).values_list('scheduled_hour', flat=True)
+
+        return Response(list(booked))
+

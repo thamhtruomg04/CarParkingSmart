@@ -68,6 +68,7 @@ class Booking(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     is_checked_in = models.BooleanField(default=False)
     slot = models.ForeignKey(ChargingSlot, on_delete=models.SET_NULL, null=True, blank=True)
+    scheduled_hour = models.IntegerField(null=True, blank=True, verbose_name="Khung giờ đặt (0-23)")
 
     def save(self, *args, **kwargs):
         is_new = self.pk is None
