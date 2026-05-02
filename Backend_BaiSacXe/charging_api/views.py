@@ -120,11 +120,8 @@ class BookingViewSet(viewsets.ModelViewSet):
         }, status=status.HTTP_200_OK)
 
     @decorators.action(detail=False, methods=['get'])
+    @decorators.action(detail=False, methods=['get'])
     def booked_hours(self, request):
-        """
-        GET /api/bookings/booked_hours/?station_id=1&slot_id=2
-        Trả về list giờ đã bị đặt trong ngày hôm nay
-        """
         station_id = request.query_params.get('station_id')
         slot_id    = request.query_params.get('slot_id')
 
@@ -140,5 +137,12 @@ class BookingViewSet(viewsets.ModelViewSet):
             booking_time__date=today
         ).values_list('scheduled_hour', flat=True)
 
-        return Response(list(booked))
+        # Mỗi booking chiếm 2 tiếng: giờ h và h+1
+        occupied = set()
+        for h in booked:
+            if h is not None:
+                occupied.add(h)
+                occupied.add(h + 1)
+
+        return Response(list(occupied))
 
