@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import ChargingStation, Booking, ChargingSlot
+from .models import ChargingStation, Booking, ChargingSlot, TimeSlot
 
 @admin.register(ChargingStation)
 class StationAdmin(admin.ModelAdmin):
@@ -24,4 +24,11 @@ class ChargingSlotAdmin(admin.ModelAdmin):
     # Tìm kiếm theo tên ô
     search_fields = ('slot_code',)
     # Cho phép tích chọn Trống/Hết ngay tại danh sách
+    list_editable = ('is_available',)
+
+@admin.register(TimeSlot)
+class TimeSlotAdmin(admin.ModelAdmin):
+    list_display = ('station', 'slot', 'date', 'start_hour', 'is_available')
+    list_filter = ('station', 'date', 'is_available')
+    search_fields = ('station__name', 'slot__slot_code')
     list_editable = ('is_available',)
