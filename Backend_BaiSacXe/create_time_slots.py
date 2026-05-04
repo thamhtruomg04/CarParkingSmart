@@ -1,23 +1,25 @@
 import os
 import django
 
-# 👇 sửa đúng tên project của bạn
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'server_parking.settings')
-
 django.setup()
 
 from datetime import date, timedelta
 from charging_api.models import ChargingStation, TimeSlot
 
 
-def create_fixed_time_slots(days=7):
+def reset_and_create_time_slots(days=7):
+    # 🔥 XÓA HẾT
+    deleted_count, _ = TimeSlot.objects.all().delete()
+    print(f"🗑️ Đã xóa {deleted_count} TimeSlot")
+
     stations = ChargingStation.objects.all()
     if not stations.exists():
-        print("❌ Chưa có trạm sạc nào trong database!")
+        print("❌ Không có trạm!")
         return
 
     today = date.today()
-    created_count = 0
+    new_slots = []
 
     for station in stations:
         for slot in station.slots.all():
@@ -28,18 +30,19 @@ def create_fixed_time_slots(days=7):
                     if h + 2 > 23:
                         continue
 
-                    _, created = TimeSlot.objects.get_or_create(
+                    new_slots.append(TimeSlot(
                         station=station,
                         slot=slot,
                         date=current_date,
                         start_hour=h,
-                        defaults={'is_available': True}
-                    )
-                    if created:
-                        created_count += 1
+                        is_available=True
+                    ))
 
-    print(f'✅ Đã tạo {created_count} khung giờ!')
+    # 🔥 tạo lại 1 lần
+    TimeSlot.objects.bulk_create(new_slots)
+
+    print(f"✅ Đã tạo lại {len(new_slots)} TimeSlot")
 
 
 if __name__ == "__main__":
-    create_fixed_time_slots(7)
+    reset_and_create_time_slots(7)
