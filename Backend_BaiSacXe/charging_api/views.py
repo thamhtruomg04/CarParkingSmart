@@ -2,7 +2,7 @@ from rest_framework import viewsets, generics, status, decorators
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.utils import timezone
-from .models import ChargingStation, Booking, ChargingSlot
+from .models import ChargingStation, Booking, ChargingSlot, TimeSlot
 from .serializers import ChargingStationSerializer, BookingSerializer, UserSerializer, ChargingSlotSerializer
 
 class RegisterView(generics.CreateAPIView):
@@ -120,29 +120,21 @@ class BookingViewSet(viewsets.ModelViewSet):
         }, status=status.HTTP_200_OK)
 
     @decorators.action(detail=False, methods=['get'])
-    @decorators.action(detail=False, methods=['get'])
     def booked_hours(self, request):
         station_id = request.query_params.get('station_id')
-        slot_id    = request.query_params.get('slot_id')
+        slot_id = request.query_params.get('slot_id')
 
-        if not station_id or not slot_id:
-            return Response({"error": "Thiếu station_id hoặc slot_id"}, status=400)
+        if not station_id:
+            return Response({"error": "Thiếu station_id"}, status=400)
 
         today = timezone.now().date()
 
-        booked = Booking.objects.filter(
+        # Lấy các khung giờ đã đặt
+        booked_slots = TimeSlot.objects.filter(
             station_id=station_id,
-            slot_id=slot_id,
-            status__in=['Quick_Booking', 'Confirmed'],
-            booking_time__date=today
-        ).values_list('scheduled_hour', flat=True)
+            date=today,
+            is_available=False
+        ).values_list('start_hour', flat=True)
 
-        # Mỗi booking chiếm 2 tiếng: giờ h và h+1
-        occupied = set()
-        for h in booked:
-            if h is not None:
-                occupied.add(h)
-                occupied.add(h + 1)
-
-        return Response(list(occupied))
+        return Response(list(booked_slots))
 

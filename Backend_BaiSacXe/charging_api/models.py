@@ -51,6 +51,27 @@ class ChargingSlot(models.Model):
     def __str__(self):
         return f"{self.station.name} - {self.slot_code}" 
 
+class TimeSlot(models.Model):
+    """Khung giờ sạc cố định 2 tiếng, không chồng chéo"""
+    station = models.ForeignKey(ChargingStation, on_delete=models.CASCADE, related_name='time_slots')
+    slot = models.ForeignKey(ChargingSlot, on_delete=models.CASCADE, related_name='time_slots', null=True, blank=True)
+    
+    start_hour = models.IntegerField()        # 0, 3, 5, 7, ..., 21
+    date = models.DateField(default=timezone.now) 
+    
+    is_available = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ('station', 'slot', 'date', 'start_hour')  # Ngăn trùng lặp
+
+    def __str__(self):
+        end_hour = self.start_hour + 2
+        return f"{self.start_hour:02d}:00 - {end_hour:02d}:00"
+
+    @property
+    def end_hour(self):
+        return self.start_hour + 2
+
 class Booking(models.Model):
     STATUS_CHOICES = [
         ('Quick_Booking', 'Đang giữ chỗ 10p'),
@@ -68,6 +89,7 @@ class Booking(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     is_checked_in = models.BooleanField(default=False)
     slot = models.ForeignKey(ChargingSlot, on_delete=models.SET_NULL, null=True, blank=True)
+    time_slot = models.ForeignKey(TimeSlot, on_delete=models.SET_NULL, null=True, blank=True)
     scheduled_hour = models.IntegerField(null=True, blank=True, verbose_name="Khung giờ đặt (0-23)")
 
     def save(self, *args, **kwargs):
@@ -123,3 +145,5 @@ def restore_slot_on_delete(sender, instance, **kwargs):
     if instance.status not in ['Cancelled', 'Completed']:
         instance.station.available_slots += 1
         instance.station.save()
+
+
