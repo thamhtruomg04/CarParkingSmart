@@ -43,6 +43,20 @@ class ChargingStationViewSet(viewsets.ModelViewSet):
             b.status = 'Cancelled'
             b.save() 
         return super().list(request, *args, **kwargs)
+    def perform_create(self, serializer):
+        station = serializer.save()
+        # Tự động tạo TimeSlot cho từng ô và từng khung giờ chẵn (0,2,4,...,22)
+        slots = ChargingSlot.objects.filter(station=station)
+        time_slots = []
+        for slot in slots:
+            for hour in range(0, 23, 2):  # 0,2,4,...,22 — mỗi ca 2 tiếng
+                time_slots.append(TimeSlot(
+                    station=station,
+                    slot=slot,
+                    start_hour=hour,
+                    is_available=True
+                ))
+        TimeSlot.objects.bulk_create(time_slots, ignore_conflicts=True)
 
 class BookingViewSet(viewsets.ModelViewSet):
     queryset = Booking.objects.all().order_by('-booking_time')
@@ -121,22 +135,19 @@ class BookingViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         data = request.data
-        station_id    = data.get('station')
-        slot_id       = data.get('slot')
+        station_id     = data.get('station')
+        slot_id        = data.get('slot')
         scheduled_hour = data.get('scheduled_hour')
 
-        # Tạo hoặc lấy TimeSlot tương ứng
         time_slot_obj = None
         if station_id and slot_id and scheduled_hour is not None:
             try:
                 scheduled_hour = int(scheduled_hour)
-                today = timezone.now().date()
 
-                # Kiểm tra xem khung giờ này đã bị đặt chưa
+                # Kiểm tra khung giờ đã bị đặt chưa
                 existing = TimeSlot.objects.filter(
                     station_id=station_id,
                     slot_id=slot_id,
-                    date=today,
                     start_hour=scheduled_hour,
                     is_available=False
                 ).first()
@@ -147,25 +158,21 @@ class BookingViewSet(viewsets.ModelViewSet):
                         status=status.HTTP_400_BAD_REQUEST
                     )
 
-                # Tạo TimeSlot mới và đánh dấu không còn trống
-                time_slot_obj, created = TimeSlot.objects.get_or_create(
+                # Lấy hoặc tạo TimeSlot, đánh dấu không còn trống
+                time_slot_obj, _ = TimeSlot.objects.get_or_create(
                     station_id=station_id,
                     slot_id=slot_id,
-                    date=today,
                     start_hour=scheduled_hour,
                     defaults={'is_available': False}
                 )
-                if not created:
-                    time_slot_obj.is_available = False
-                    time_slot_obj.save()
+                time_slot_obj.is_available = False
+                time_slot_obj.save()
 
             except (ValueError, TypeError):
                 pass
 
-        # Tạo Booking bình thường
         response = super().create(request, *args, **kwargs)
 
-        # Gắn time_slot vào booking vừa tạo
         if response.status_code == 201 and time_slot_obj:
             try:
                 booking = Booking.objects.get(pk=response.data['id'])
@@ -184,13 +191,10 @@ class BookingViewSet(viewsets.ModelViewSet):
         if not station_id or not slot_id:
             return Response({"error": "Thiếu station_id hoặc slot_id"}, status=400)
 
-        today = timezone.now().date()
-
-        # Lấy từ TimeSlot — chính xác hơn
+        # Lấy trực tiếp từ DB — không lọc theo date
         booked = TimeSlot.objects.filter(
             station_id=station_id,
             slot_id=slot_id,
-            date=today,
             is_available=False
         ).values_list('start_hour', flat=True)
 

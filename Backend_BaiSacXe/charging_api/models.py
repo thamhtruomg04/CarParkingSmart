@@ -52,17 +52,13 @@ class ChargingSlot(models.Model):
         return f"{self.station.name} - {self.slot_code}" 
 
 class TimeSlot(models.Model):
-    """Khung giờ sạc cố định 2 tiếng, không chồng chéo"""
     station = models.ForeignKey(ChargingStation, on_delete=models.CASCADE, related_name='time_slots')
     slot = models.ForeignKey(ChargingSlot, on_delete=models.CASCADE, related_name='time_slots', null=True, blank=True)
-    
-    start_hour = models.IntegerField()        # 0, 3, 5, 7, ..., 21
-    date = models.DateField(default=timezone.now) 
-    
+    start_hour = models.IntegerField()
     is_available = models.BooleanField(default=True)
 
     class Meta:
-        unique_together = ('station', 'slot', 'date', 'start_hour')  # Ngăn trùng lặp
+        unique_together = ('station', 'slot', 'start_hour')  # bỏ 'date'
 
     def __str__(self):
         end_hour = self.start_hour + 2

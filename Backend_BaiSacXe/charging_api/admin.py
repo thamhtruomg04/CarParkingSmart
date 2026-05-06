@@ -28,7 +28,7 @@ class ChargingSlotAdmin(admin.ModelAdmin):
 
 @admin.register(TimeSlot)
 class TimeSlotAdmin(admin.ModelAdmin):
-    list_display = ('station', 'slot', 'date', 'start_hour', 'is_available')
-    list_filter = ('station', 'date', 'is_available')
+    list_display = ('station', 'slot', 'start_hour', 'is_available')
+    list_filter = ('station', 'is_available')
     search_fields = ('station__name', 'slot__slot_code')
     list_editable = ('is_available',)
