@@ -117,13 +117,17 @@ class Booking(models.Model):
             old_booking = Booking.objects.get(pk=self.pk)
             
             # Nếu chuyển từ Quick_Booking hoặc Confirmed sang Cancelled/Completed
+            # Trong else (khi cập nhật):
             if self.status in ['Cancelled', 'Completed'] and old_booking.status not in ['Cancelled', 'Completed']:
-                # Trả lại slot
                 if self.slot:
                     self.slot.is_available = True
                     self.slot.save()
                 
-                # TRẢ LẠI available_slots
+                # Trả lại TimeSlot
+                if self.time_slot:
+                    self.time_slot.is_available = True
+                    self.time_slot.save()
+                
                 self.station.available_slots += 1
                 self.station.save()
 
