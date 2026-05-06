@@ -78,6 +78,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSharePlace: LinearLayout
     private lateinit var btnNearby: LinearLayout
 
+    private lateinit var placeAdapter: PlaceAdapter
+
     private lateinit var chipRestaurant: MaterialCardView
     private lateinit var chipCafe: MaterialCardView
     private lateinit var chipHotel: MaterialCardView
@@ -98,10 +100,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnCloseSheet: ImageButton
 
     private lateinit var btnBookParking: Button
-    private val suggestionsAdapter by lazy {
-        ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line,
-            suggestionsData.map { it.name })
-    }
+
     private lateinit var btnSaveMySpot: Button
     private lateinit var btnFindMySpot: Button
     private val searchHandler = Handler(Looper.getMainLooper())
@@ -250,7 +249,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun showSlotSelectionDialog(slots: List<ChargingSlot>) {
         val dialog = BottomSheetDialog(this)
-        // Đảm bảo bạn đã tạo file dialog_select_slot.xml
         val view = layoutInflater.inflate(R.layout.dialog_select_slot, null)
         dialog.setContentView(view)
 
@@ -259,35 +257,25 @@ class MainActivity : AppCompatActivity() {
 
         var selectedSlot: ChargingSlot? = null
 
-        // 1. Cấu hình hiển thị lưới 5 cột
         rvSlots.layoutManager = GridLayoutManager(this, 5)
-
-        // 2. Thiết lập Adapter và xử lý sự kiện khi người dùng chọn ô
         rvSlots.adapter = SlotAdapter(slots) { slot ->
-            // Gán vào biến cục bộ để xử lý trong Dialog này
             selectedSlot = slot
-
-            // QUAN TRỌNG: Gán ID vào biến toàn cục của MainActivity để hàm confirmQuickBooking có thể lấy dùng
             currentSelectedSlotId = slot.id
-
-            // Hiện nút xác nhận và cập nhật tên ô đã chọn
             btnConfirm.visibility = View.VISIBLE
             btnConfirm.text = "Xác nhận đặt ô ${slot.slot_code}"
         }
 
+        // ← CHỈ 1 LỚP LISTENER, KHÔNG LỒNG NHAU
         btnConfirm.setOnClickListener {
-    selectedSlot?.let { slot ->
-        // 1. Lưu lại ID ô đã chọn
-        currentSelectedSlotId = slot.id
-
-        // 2. Gửi lệnh đặt chỗ lên Server (Hàm này sẽ chịu trách nhiệm hiện QR nếu thành công)
-        guilenServerDatCho(slot)
-
-        // 3. Đóng sơ đồ chọn ô
-        dialog.dismiss()
-        
-    }
-}
+            selectedSlot?.let { slot ->
+                currentSelectedSlotId = slot.id
+                dialog.dismiss()
+                // Dùng Handler để đợi dialog đóng hẳn rồi mới mở dialog giờ
+                Handler(Looper.getMainLooper()).postDelayed({
+                    showTimeSlotDialog(slot)
+                }, 200)
+            }
+        }
 
         dialog.show()
     }
@@ -304,7 +292,8 @@ class MainActivity : AppCompatActivity() {
                 userId = currentUserEmail,
                 stationId = targetStationId, 
                 slotId = slot.id,
-                status = "Quick_Booking" // Khớp với STATUS_CHOICES trong Django
+                status = "Quick_Booking",
+                scheduledHour = selectedHour
             )
 
             if (response.isSuccessful) {
@@ -495,26 +484,21 @@ class MainActivity : AppCompatActivity() {
         val btnBookLater = findViewById<Button>(R.id.btn_book_parking_later)
         btnBookLater.setOnClickListener {
             if (parking.hasChargingStation) {
-                // Gọi API lấy danh sách ô thực tế trước khi đặt trước
                 lifecycleScope.launch {
                     try {
-                        // Sử dụng RetrofitClient để gọi hàm getSlots bạn vừa thêm vào ApiService
                         val response = RetrofitClient.instance.getSlots(parking.id)
-
                         if (response.isSuccessful) {
                             val realSlots = response.body() ?: emptyList()
                             if (realSlots.isNotEmpty()) {
-                                // Hiện sơ đồ để người dùng chọn ô trước khi hiện QR thanh toán
                                 showSlotSelectionDialog(realSlots)
                             } else {
                                 Toast.makeText(this@MainActivity, "Trạm này chưa có dữ liệu ô sạc!", Toast.LENGTH_SHORT).show()
                             }
                         } else {
-                            Toast.makeText(this@MainActivity, "Không thể tải sơ đồ ô sạc từ máy chủ!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@MainActivity, "Không thể tải sơ đồ ô sạc!", Toast.LENGTH_SHORT).show()
                         }
                     } catch (e: Exception) {
-                        android.util.Log.e("API_ERROR", "Lỗi lấy Slots: ${e.message}")
-                        Toast.makeText(this@MainActivity, "Lỗi kết nối: Không thể lấy danh sách ô!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "Lỗi kết nối: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
                 }
             } else {
@@ -524,6 +508,76 @@ class MainActivity : AppCompatActivity() {
 
         // Cuối cùng: Mở BottomSheet nếu nó đang ẩn
         bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
+    }
+
+    private var selectedHour: Int = -1
+    private var selectedBookingTimeMillis: Long = 0L
+
+    private fun showTimeSlotDialog(slot: ChargingSlot) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_time_picker, null)
+        val tvInfo     = dialogView.findViewById<TextView>(R.id.tv_selected_slot_info)
+        val rvTime     = dialogView.findViewById<RecyclerView>(R.id.rv_time_slots)
+        val btnConfirm = dialogView.findViewById<Button>(R.id.btn_confirm_time)
+
+        tvInfo.text = "Ô đã chọn: ${slot.slot_code} — Chọn giờ bắt đầu sạc (mỗi lần sạc 2 tiếng)"
+        selectedHour = -1
+        btnConfirm.visibility = View.GONE
+
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(true)
+            .create()
+
+        lifecycleScope.launch {
+            // Lấy giờ đã bị đặt từ database thực tế
+            val bookedHours = fetchBookedHours(currentPlace?.id ?: 1, slot.id)
+
+            // Tạo 12 khung giờ chẵn: 00:00-02:00, 02:00-04:00, ..., 22:00-24:00
+            val timeSlots = (0..22 step 2).map { h ->
+                val isBooked = h in bookedHours || (h + 1) in bookedHours
+                TimeSlot(
+                    hour  = h,
+                    label = String.format("%02d:00 – %02d:00", h, h + 2),
+                    isBooked = isBooked
+                )
+            }
+
+            runOnUiThread {
+                rvTime.layoutManager = GridLayoutManager(this@MainActivity, 3)
+                rvTime.adapter = TimeSlotAdapter(timeSlots) { chosen ->
+                    selectedHour = chosen.hour
+                    btnConfirm.visibility = View.VISIBLE
+                    btnConfirm.text = "ĐẶT Ô ${slot.slot_code}: ${chosen.label}"
+                }
+            }
+        }
+
+        btnConfirm.setOnClickListener {
+            if (selectedHour == -1) {
+                Toast.makeText(this, "Vui lòng chọn khung giờ!", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val cal = java.util.Calendar.getInstance()
+            cal.set(java.util.Calendar.HOUR_OF_DAY, selectedHour)
+            cal.set(java.util.Calendar.MINUTE, 0)
+            cal.set(java.util.Calendar.SECOND, 0)
+            selectedBookingTimeMillis = cal.timeInMillis
+            dialog.dismiss()
+            guilenServerDatCho(slot)
+        }
+
+        dialog.show()
+    }
+
+    private suspend fun fetchBookedHours(stationId: Int, slotId: Int): Set<Int> {
+        return try {
+            val response = RetrofitClient.instance.getBookedHours(stationId, slotId)
+            if (response.isSuccessful) response.body()?.toSet() ?: emptySet()
+            else emptySet()
+        } catch (e: Exception) {
+            android.util.Log.e("API", "Lỗi lấy giờ bận: ${e.message}")
+            emptySet()
+        }
     }
 
     private fun getLoggedInUserEmail(): String {
@@ -726,8 +780,6 @@ class MainActivity : AppCompatActivity() {
             showLayerOptions()
         }
 
-
-
         btnVoice.setOnClickListener {
             Toast.makeText(this, "Tính năng đang phát triển", Toast.LENGTH_SHORT).show()
         }
@@ -787,29 +839,39 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupSearchWithAutocomplete() {
-        searchBox.setAdapter(suggestionsAdapter)
-        searchBox.threshold = 2
-        searchBox.dropDownHeight = 800
+        placeAdapter = PlaceAdapter(this, suggestionsData)
+        searchBox.setAdapter(placeAdapter)
+        searchBox.threshold = 1
+        searchBox.dropDownHeight = 1000
+
+        // ✅ Dùng post{} để đo sau khi layout render xong
+        searchBox.post {
+            val density = resources.displayMetrics.density
+            val screenWidth = resources.displayMetrics.widthPixels
+
+            // Card margin 12dp mỗi bên = 24dp tổng
+            val cardMargin = (24 * density).toInt()
+            val cardWidth = screenWidth - cardMargin
+
+            // Dropdown rộng bằng Card
+            searchBox.dropDownWidth = cardWidth
+
+            // Bù lại icon logo (44dp) + padding LinearLayout (2dp) + card margin trái (12dp)
+            val offsetLeft = ((44 + 2 + 12) * density).toInt()
+            searchBox.dropDownHorizontalOffset = -offsetLeft
+            searchBox.dropDownVerticalOffset = 4
+        }
 
         searchBox.addTextChangedListener(object : android.text.TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val query = s.toString().trim()
                 searchRunnable?.let { searchHandler.removeCallbacks(it) }
-
-                if (query.length >= 2) {
-                    searchRunnable = Runnable {
-                        loadSuggestions(query)
-                    }
+                if (query.length >= 1) {
+                    searchRunnable = Runnable { this@MainActivity.loadSuggestions(query) }
                     searchHandler.postDelayed(searchRunnable!!, 300)
-                } else {
-                    suggestionsData.clear()
-                    suggestionsAdapter.clear()
-                    suggestionsAdapter.notifyDataSetChanged()
                 }
             }
-
             override fun afterTextChanged(s: android.text.Editable?) {}
         })
 
@@ -826,13 +888,11 @@ class MainActivity : AppCompatActivity() {
             } else false
         }
 
-        searchBox.setOnItemClickListener { parent, _, position, _ ->
-            if (position < suggestionsData.size) {
-                val selected = suggestionsData[position]
-                searchBox.setText(selected.name)
-                showMarkerAtLocation(selected.lat, selected.lon, selected.name, selected.address)
-                hideKeyboard()
-            }
+        searchBox.setOnItemClickListener { _, _, position, _ ->
+            val selected = placeAdapter.getItem(position) ?: return@setOnItemClickListener
+            searchBox.setText(selected.name)
+            showMarkerAtLocation(selected.lat, selected.lon, selected.name, selected.address)
+            hideKeyboard()
         }
     }
 
@@ -842,97 +902,69 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadSuggestions(query: String) {
-        // 1. Tìm trong danh sách nội bộ (Local) trước để tăng tốc độ
         val localMatches = parkingLots.filter { parking ->
             parking.name.contains(query, ignoreCase = true) ||
-                    parking.address.contains(query, ignoreCase = true)
+                    parking.address.contains(query, ignoreCase = true) ||
+                    parking.ward.contains(query, ignoreCase = true)
         }.map { parking ->
             PlaceInfo(
-                parking.id,
-                parking.lat,
-                parking.lon,
-                parking.name + (if (parking.hasChargingStation) " ⚡" else ""),
+                parking.id, parking.lat, parking.lon,
+                parking.name + if (parking.hasChargingStation) " ⚡" else "",
                 parking.address,
-                "Bãi đỗ xe"
+                if (parking.hasChargingStation) "Trạm sạc" else "Bãi đỗ xe"
             )
         }
 
-        // Nếu có kết quả nội bộ, hiển thị ngay và dừng lại
         if (localMatches.isNotEmpty()) {
             runOnUiThread {
                 suggestionsData.clear()
                 suggestionsData.addAll(localMatches)
-
-                suggestionsAdapter.clear()
-                suggestionsAdapter.addAll(localMatches.map { it.name })
-                suggestionsAdapter.notifyDataSetChanged()
-
-                if (searchBox.hasFocus()) {
-                    searchBox.showDropDown()
-                }
+                placeAdapter.replaceAll(localMatches)   // ✅ Dùng placeAdapter
+                if (searchBox.hasFocus()) searchBox.showDropDown()
             }
             return
         }
 
-        // 2. Nếu không thấy trong máy, mới gọi API Nominatim (Online)
         Thread {
             try {
                 val encoded = URLEncoder.encode(query, "UTF-8")
-                var urlString = "https://nominatim.openstreetmap.org/search?format=json&q=$encoded&countrycodes=vn&limit=10&addressdetails=1&accept-language=vi"
+                var urlString = "https://nominatim.openstreetmap.org/search" +
+                        "?format=json&q=$encoded&countrycodes=vn&limit=10&addressdetails=1&accept-language=vi"
+                myLocationOverlay?.myLocation?.let { urlString += "&lat=${it.latitude}&lon=${it.longitude}" }
 
-                myLocationOverlay?.myLocation?.let { myLoc ->
-                    urlString += "&lat=${myLoc.latitude}&lon=${myLoc.longitude}"
+                val conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
+                    setRequestProperty("User-Agent", "CarParkingSmart/1.0")
+                    connectTimeout = 8000; readTimeout = 8000
                 }
 
-                val url = URL(urlString)
-                val conn = url.openConnection() as HttpURLConnection
-                conn.setRequestProperty("User-Agent", "CarParkingSmart/1.0")
-                conn.connectTimeout = 10000
-                conn.readTimeout = 10000
-
                 if (conn.responseCode == 200) {
-                    val json = conn.inputStream.bufferedReader().readText()
-                    val array = JSONArray(json)
+                    val array    = JSONArray(conn.inputStream.bufferedReader().readText())
                     val tempList = mutableListOf<PlaceInfo>()
-                    val displayNames = mutableListOf<String>()
+                    val seen     = mutableSetOf<String>()
 
                     for (i in 0 until array.length()) {
-                        val obj = array.getJSONObject(i)
-
-                        // LƯU Ý: Nominatim trả về lat/lon là Chuỗi (String), cần convert sang Double
-                        val lat = obj.getString("lat").toDouble()
-                        val lon = obj.getString("lon").toDouble()
+                        val obj         = array.getJSONObject(i)
+                        val lat         = obj.getString("lat").toDouble()
+                        val lon         = obj.getString("lon").toDouble()
                         val displayName = obj.getString("display_name")
+                        val shortName   = if (obj.has("name") && obj.getString("name").isNotBlank())
+                            obj.getString("name") else displayName.split(",")[0].trim()
 
-                        val shortName = if (obj.has("name") && obj.getString("name").isNotEmpty()) {
-                            obj.getString("name")
-                        } else {
-                            displayName.split(",")[0].trim()
-                        }
-
-                        if (!displayNames.contains(shortName)) {
+                        if (shortName !in seen) {
+                            seen.add(shortName)
                             tempList.add(PlaceInfo(0, lat, lon, shortName, displayName))
-                            displayNames.add(shortName)
                         }
                     }
 
                     runOnUiThread {
                         suggestionsData.clear()
                         suggestionsData.addAll(tempList)
-
-                        suggestionsAdapter.clear()
-                        suggestionsAdapter.addAll(displayNames)
-                        suggestionsAdapter.notifyDataSetChanged()
-
-                        if (tempList.isNotEmpty() && searchBox.hasFocus()) {
-                            searchBox.showDropDown()
-                        }
+                        placeAdapter.replaceAll(tempList)   // ✅ Dùng placeAdapter
+                        if (tempList.isNotEmpty() && searchBox.hasFocus()) searchBox.showDropDown()
                     }
                 }
                 conn.disconnect()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            } catch (e: Exception) { e.printStackTrace() }
         }.start()
     }
 

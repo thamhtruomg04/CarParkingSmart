@@ -35,7 +35,7 @@ class SlotAdapter(
         holder.tvSlotCode.text = slot.slot_code
 
         when {
-            // ✅ Ô đã bị đặt — làm mờ, không cho chọn
+            // Ô đã bị đặt — làm mờ, không cho chọn
             !slot.is_available -> {
                 holder.itemView.setBackgroundColor(Color.parseColor("#CCCCCC"))
                 holder.tvSlotCode.setTextColor(Color.parseColor("#888888"))
@@ -43,7 +43,7 @@ class SlotAdapter(
                 holder.itemView.isClickable = false
                 holder.itemView.isEnabled = false
             }
-            // ✅ Ô đang được chọn
+            // Ô đang được chọn
             position == selectedPosition -> {
                 holder.itemView.setBackgroundColor(Color.parseColor("#4CAF50"))
                 holder.tvSlotCode.setTextColor(Color.WHITE)
@@ -51,7 +51,7 @@ class SlotAdapter(
                 holder.itemView.isClickable = true
                 holder.itemView.isEnabled = true
             }
-            // ✅ Ô trống bình thường
+            // Ô trống bình thường
             else -> {
                 holder.itemView.setBackgroundColor(Color.parseColor("#E8F5E9"))
                 holder.tvSlotCode.setTextColor(Color.parseColor("#1B5E20"))

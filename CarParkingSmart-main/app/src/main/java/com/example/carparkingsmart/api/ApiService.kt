@@ -30,7 +30,8 @@ interface ApiService {
         @Field("user_id") userId: String,
         @Field("station") stationId: Int,
         @Field("slot") slotId: Int,
-        @Field("status") status: String
+        @Field("status") status: String,
+        @Field("scheduled_hour") scheduledHour: Int = -1
     ): Response<BookingResponse>
 
     // Cập nhật trạng thái đặt chỗ
@@ -52,6 +53,13 @@ interface ApiService {
     suspend fun confirmBookingAndSubtractSlot(
         @Path("id") bookingId: Int
     ): Response<ResponseBody>
+
+    // Lấy danh sách giờ đã bị đặt của một ô trong ngày
+    @GET("api/bookings/booked_hours/")
+    suspend fun getBookedHours(
+        @Query("station_id") stationId: Int,
+        @Query("slot_id") slotId: Int
+    ): Response<List<Int>>
 
     // Cấu trúc dữ liệu phản hồi cho Đặt chỗ
     data class BookingResponse(
