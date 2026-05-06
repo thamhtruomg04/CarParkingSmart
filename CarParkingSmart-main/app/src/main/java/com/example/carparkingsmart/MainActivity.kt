@@ -60,6 +60,8 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 class MainActivity : AppCompatActivity() {
     private lateinit var db: AppDatabase
 
+    private var currentSelectedSlotCode: String = ""
+
     private lateinit var map: MapView
     private lateinit var searchBox: AutoCompleteTextView
     private lateinit var btnVoice: ImageButton
@@ -261,6 +263,7 @@ class MainActivity : AppCompatActivity() {
         rvSlots.adapter = SlotAdapter(slots) { slot ->
             selectedSlot = slot
             currentSelectedSlotId = slot.id
+            currentSelectedSlotCode = slot.slot_code
             btnConfirm.visibility = View.VISIBLE
             btnConfirm.text = "Xác nhận đặt ô ${slot.slot_code}"
         }
@@ -1210,7 +1213,7 @@ class MainActivity : AppCompatActivity() {
     if (imgQR == null || tvTimerInDialog == null) return
 
     val qrUrl = "https://img.vietqr.io/image/ICB-108876696755-compact.png" +
-                "?amount=50000&addInfo=DatCho_${currentBookingId}"
+                "?amount=499000&addInfo=DatCho_${currentBookingId}"
     Glide.with(this).load(qrUrl).into(imgQR)
 
     // Dùng AlertDialog (không phải BottomSheetDialog)
@@ -1244,6 +1247,12 @@ class MainActivity : AppCompatActivity() {
                         "✅ Xác nhận thành công! Chỗ sạc đã được giữ.",
                         Toast.LENGTH_LONG
                     ).show()
+                    showAndSaveInvoice(
+                        bookingId    = currentBookingId,
+                        slotCode     = currentSelectedSlotCode,   // xem bước 3
+                        stationName  = currentPlace?.name ?: "Trạm sạc",
+                        scheduledHour = selectedHour
+                    )
                 } else {
                     Toast.makeText(
                         this@MainActivity,
@@ -1357,6 +1366,13 @@ class MainActivity : AppCompatActivity() {
                             "✅ Thanh toán thành công! Đã trừ 1 chỗ sạc.",
                             Toast.LENGTH_LONG
                         ).show()
+
+                        showAndSaveInvoice(
+                            bookingId     = bookingId,
+                            slotCode      = currentSelectedSlotCode,
+                            stationName   = currentPlace?.name ?: "Trạm sạc",
+                            scheduledHour = selectedHour
+                        )
                     } else {
                         Toast.makeText(
                             this@MainActivity,
@@ -1793,5 +1809,124 @@ class MainActivity : AppCompatActivity() {
         intent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
         startActivity(intent)
         finish()
+    }
+
+    private fun showAndSaveInvoice(bookingId: Int, slotCode: String, stationName: String, scheduledHour: Int) {
+        // 1. Tạo View hóa đơn từ layout
+        val invoiceView = layoutInflater.inflate(R.layout.layout_invoice, null)
+
+        // Điền thông tin vào hóa đơn
+        invoiceView.findViewById<TextView>(R.id.tv_invoice_id).text = "Mã HĐ: #${bookingId}"
+        invoiceView.findViewById<TextView>(R.id.tv_invoice_station).text = "Trạm: $stationName"
+        invoiceView.findViewById<TextView>(R.id.tv_invoice_slot).text = "Ô sạc: $slotCode"
+
+        val endHour = scheduledHour + 2
+        invoiceView.findViewById<TextView>(R.id.tv_invoice_time).text =
+            "Khung giờ: ${String.format("%02d:00 – %02d:00", scheduledHour, endHour)}"
+
+        val sdf = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault())
+        invoiceView.findViewById<TextView>(R.id.tv_invoice_date).text =
+            "Thời gian: ${sdf.format(java.util.Date())}"
+
+        invoiceView.findViewById<TextView>(R.id.tv_invoice_amount).text = "Số tiền: 499.000 VNĐ"
+        invoiceView.findViewById<TextView>(R.id.tv_invoice_status).text = "✅ ĐÃ THANH TOÁN"
+
+        // 2. Đo và render View thành Bitmap
+        invoiceView.measure(
+            View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        invoiceView.layout(0, 0, invoiceView.measuredWidth, invoiceView.measuredHeight)
+
+        val bitmap = android.graphics.Bitmap.createBitmap(
+            invoiceView.measuredWidth,
+            invoiceView.measuredHeight,
+            android.graphics.Bitmap.Config.ARGB_8888
+        )
+        val canvas = android.graphics.Canvas(bitmap)
+        invoiceView.draw(canvas)
+
+        // 3. Lưu ảnh vào thư mục Pictures
+        val fileName = "HoaDon_${bookingId}_${System.currentTimeMillis()}.png"
+        val savedUri = saveInvoiceBitmap(bitmap, fileName)
+
+        // 4. Hiện dialog xem trước hóa đơn
+        showInvoicePreviewDialog(bitmap, savedUri)
+    }
+
+    private fun saveInvoiceBitmap(bitmap: android.graphics.Bitmap, fileName: String): android.net.Uri? {
+        return try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                // Android 10+ dùng MediaStore
+                val contentValues = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, fileName)
+                    put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
+                    put(android.provider.MediaStore.Images.Media.RELATIVE_PATH,
+                        android.os.Environment.DIRECTORY_PICTURES + "/HoaDonSac")
+                }
+                val uri = contentResolver.insert(
+                    android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    contentValues
+                )
+                uri?.let {
+                    contentResolver.openOutputStream(it)?.use { out ->
+                        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                    }
+                }
+                uri
+            } else {
+                // Android 9 trở xuống
+                val dir = java.io.File(
+                    android.os.Environment.getExternalStoragePublicDirectory(
+                        android.os.Environment.DIRECTORY_PICTURES), "HoaDonSac"
+                )
+                if (!dir.exists()) dir.mkdirs()
+                val file = java.io.File(dir, fileName)
+                java.io.FileOutputStream(file).use { out ->
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                }
+                android.net.Uri.fromFile(file)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("INVOICE", "Lỗi lưu ảnh: ${e.message}")
+            null
+        }
+    }
+
+    private fun showInvoicePreviewDialog(bitmap: android.graphics.Bitmap, savedUri: android.net.Uri?) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_invoice_preview, null)
+        val imgInvoice = dialogView.findViewById<ImageView>(R.id.img_invoice_preview)
+        val tvSaveStatus = dialogView.findViewById<TextView>(R.id.tv_save_status)
+        val btnShare = dialogView.findViewById<Button>(R.id.btn_share_invoice)
+        val btnClose = dialogView.findViewById<Button>(R.id.btn_close_invoice)
+
+        imgInvoice.setImageBitmap(bitmap)
+
+        if (savedUri != null) {
+            tvSaveStatus.text = "✅ Đã lưu vào Thư viện ảnh / Pictures/HoaDonSac"
+            tvSaveStatus.setTextColor(Color.parseColor("#4CAF50"))
+        } else {
+            tvSaveStatus.text = "⚠️ Không thể lưu ảnh tự động"
+            tvSaveStatus.setTextColor(Color.parseColor("#FF9800"))
+        }
+
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(false)
+            .create()
+
+        btnShare.setOnClickListener {
+            savedUri?.let { uri ->
+                val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "image/png"
+                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(android.content.Intent.createChooser(shareIntent, "Chia sẻ hóa đơn"))
+            } ?: Toast.makeText(this, "Không có file để chia sẻ!", Toast.LENGTH_SHORT).show()
+        }
+
+        btnClose.setOnClickListener { dialog.dismiss() }
+        dialog.show()
     }
 }

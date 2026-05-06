@@ -35,36 +35,27 @@ class SlotAdapter(
         holder.tvSlotCode.text = slot.slot_code
 
         when {
-            // Ô đã bị đặt — làm mờ, không cho chọn
-            !slot.is_available -> {
-                holder.itemView.setBackgroundColor(Color.parseColor("#CCCCCC"))
-                holder.tvSlotCode.setTextColor(Color.parseColor("#888888"))
-                holder.itemView.alpha = 0.5f
-                holder.itemView.isClickable = false
-                holder.itemView.isEnabled = false
-            }
             // Ô đang được chọn
             position == selectedPosition -> {
                 holder.itemView.setBackgroundColor(Color.parseColor("#4CAF50"))
                 holder.tvSlotCode.setTextColor(Color.WHITE)
                 holder.itemView.alpha = 1f
-                holder.itemView.isClickable = true
-                holder.itemView.isEnabled = true
             }
-            // Ô trống bình thường
+            // Tất cả ô đều có thể chọn (vì có nhiều khung giờ)
             else -> {
                 holder.itemView.setBackgroundColor(Color.parseColor("#E8F5E9"))
                 holder.tvSlotCode.setTextColor(Color.parseColor("#1B5E20"))
                 holder.itemView.alpha = 1f
-                holder.itemView.isClickable = true
-                holder.itemView.isEnabled = true
             }
         }
 
+        // Tất cả ô đều clickable
+        holder.itemView.isClickable = true
+        holder.itemView.isEnabled = true
+
         holder.itemView.setOnClickListener {
-            if (!slot.is_available) return@setOnClickListener
             val oldPosition = selectedPosition
-            selectedPosition = position
+            selectedPosition = holder.bindingAdapterPosition
             notifyItemChanged(oldPosition)
             notifyItemChanged(selectedPosition)
             onSlotSelected(slot)
