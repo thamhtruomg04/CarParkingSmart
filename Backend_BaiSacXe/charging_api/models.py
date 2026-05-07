@@ -27,17 +27,24 @@ class ChargingStation(models.Model):
         if is_new and self.total_slots > 0:
             new_slots = []
             for i in range(1, self.total_slots + 1):
-                # Cứ 10 chỗ thì nhảy sang một chữ cái mới (A, B, C...)
-                # ASCII 65 là 'A', 66 là 'B'...
-                row_char = chr(65 + (i - 1) // 10) 
-                # Số thứ tự từ 1 đến 10 trong mỗi hàng
+                row_char = chr(65 + (i - 1) // 10)
                 num = (i - 1) % 10 + 1
                 slot_code = f"{row_char}{num}"
-                
                 new_slots.append(ChargingSlot(station=self, slot_code=slot_code))
             
-            # Dùng bulk_create để lưu tất cả một lần cho nhanh
-            ChargingSlot.objects.bulk_create(new_slots)
+            created_slots = ChargingSlot.objects.bulk_create(new_slots)
+
+            # ← THÊM PHẦN NÀY: tự tạo TimeSlot cho từng ô vừa tạo
+            time_slots = []
+            for slot in created_slots:
+                for hour in range(0, 23, 2):  # 0,2,4,...,22
+                    time_slots.append(TimeSlot(
+                        station=self,
+                        slot=slot,
+                        start_hour=hour,
+                        is_available=True
+                    ))
+            TimeSlot.objects.bulk_create(time_slots, ignore_conflicts=True)
 
     def __str__(self):
         return self.name
@@ -136,14 +143,25 @@ class Booking(models.Model):
 # Signal xử lý khi xóa booking từ Admin
 @receiver(post_delete, sender=Booking)
 def restore_slot_on_delete(sender, instance, **kwargs):
-    """Trả lại slot khi xóa booking từ Admin"""
-    if instance.slot:
-        instance.slot.is_available = True
-        instance.slot.save()
+    """Trả lại slot khi xóa booking từ Admin (Xử lý an toàn khi xóa Station)"""
+    try:
+        # Kiểm tra xem slot có tồn tại không trước khi truy cập
+        if instance.slot_id: # Kiểm tra ID trước để tránh tự động truy vấn nếu không cần
+            if instance.slot: # Truy cập instance.slot có thể gây lỗi nếu đã bị CASCADE xóa
+                instance.slot.is_available = True
+                instance.slot.save()
+    except Exception:
+        # Nếu slot đã bị xóa trước đó (do CASCADE từ Station), bỏ qua lỗi này
+        pass
     
-    # Chỉ cộng lại nếu booking chưa ở trạng thái kết thúc
-    if instance.status not in ['Cancelled', 'Completed']:
-        instance.station.available_slots += 1
-        instance.station.save()
+    try:
+        # Tương tự với station, nếu xóa station thì instance.station cũng có thể gây lỗi
+        if instance.status not in ['Cancelled', 'Completed']:
+            # Chỉ thực hiện nếu Station vẫn còn tồn tại
+            station = instance.station
+            station.available_slots += 1
+            station.save()
+    except Exception:
+        pass
 
 
