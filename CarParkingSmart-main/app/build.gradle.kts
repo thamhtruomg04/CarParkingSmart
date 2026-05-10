@@ -37,7 +37,6 @@ dependencies {
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     val room_version = "2.6.1"
-
     implementation("androidx.room:room-runtime:$room_version")
     implementation("androidx.room:room-ktx:$room_version")
     implementation("org.osmdroid:osmdroid-android:6.1.18")

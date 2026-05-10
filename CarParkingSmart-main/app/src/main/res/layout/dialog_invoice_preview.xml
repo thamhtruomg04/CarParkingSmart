@@ -37,11 +37,24 @@
         android:orientation="horizontal"
         android:layout_marginTop="8dp">
 
+        <!-- Thêm Button này vào LinearLayout ngang, trước btn_share_invoice -->
+        <Button
+            android:id="@+id/btn_download_invoice"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="10sp"
+            android:text="Tải xuống"
+            android:layout_marginEnd="4dp"
+            android:backgroundTint="#2E7D32"
+            android:textColor="#FFFFFF"/>
+
         <Button
             android:id="@+id/btn_share_invoice"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:textSize="10sp"
             android:text="Chia sẻ"
             android:layout_marginEnd="8dp"
             android:backgroundTint="#1565C0"
@@ -52,6 +65,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:textSize="10sp"
             android:text="Đóng"
             android:backgroundTint="#4CAF50"
             android:textColor="#FFFFFF"/>

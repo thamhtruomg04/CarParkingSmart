@@ -8,11 +8,14 @@
         android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32"/>
+
 
     <application
         android:allowBackup="true"
@@ -27,6 +30,18 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
 
+
+        <!-- Trong thẻ <application> -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"/>
+        </provider>
+
         <activity
             android:name=".auth.LoginActivity"
             android:exported="true">
@@ -36,12 +51,12 @@
             </intent-filter>
         </activity>
 
-        <activity 
-            android:name=".MainActivity" 
+        <activity
+            android:name=".MainActivity"
             android:exported="true" />
 
-        <activity 
-            android:name=".auth.RegisterActivity" 
+        <activity
+            android:name=".auth.RegisterActivity"
             android:exported="false" />
 
     </application>

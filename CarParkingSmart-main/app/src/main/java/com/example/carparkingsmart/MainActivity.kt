@@ -1,6 +1,7 @@
 package com.example.carparkingsmart
 
 import android.Manifest
+import androidx.appcompat.app.AlertDialog
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -80,6 +81,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSharePlace: LinearLayout
     private lateinit var btnNearby: LinearLayout
 
+    private var directionSteps = mutableListOf<DirectionStep>()
+
+    private lateinit var directionsBottomSheetDialog: BottomSheetDialog
+
     private lateinit var placeAdapter: PlaceAdapter
 
     private lateinit var chipRestaurant: MaterialCardView
@@ -129,6 +134,15 @@ class MainActivity : AppCompatActivity() {
     private var checkPaymentHandler = Handler(Looper.getMainLooper())
 
     private var currentSelectedSlotId: Int = 0
+    private var navigationPanel: View? = null
+    private lateinit var tvNavigationInstruction: TextView
+    private lateinit var tvDistanceRemaining: TextView
+    private lateinit var tvTimeRemaining: TextView
+    private lateinit var tvStepCount: TextView
+    private lateinit var rvRemainingSteps: RecyclerView
+    private var totalDistanceToDest = 0.0
+    private var startTime = 0L
+    private var isVoiceMuted = false
 
     private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
         val startPoint = GeoPoint(lat1, lon1)
@@ -180,6 +194,25 @@ class MainActivity : AppCompatActivity() {
     private val chargingRequestQueue = mutableListOf<ChargingRequest>()
     private var currentNearestChargingStation: ParkingLot? = null
 
+    // Thêm vào đầu class MainActivity, cạnh các biến lateinit
+    private var pendingInvoiceBitmap: android.graphics.Bitmap? = null
+
+    private val saveInvoiceLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("image/png")
+    ) { uri ->
+        uri?.let { dest ->
+            pendingInvoiceBitmap?.let { bmp ->
+                try {
+                    contentResolver.openOutputStream(dest)?.use { out ->
+                        bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                    }
+                    Toast.makeText(this, "Đã lưu hóa đơn thành công!", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Lỗi lưu file: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -209,6 +242,7 @@ class MainActivity : AppCompatActivity() {
 
         // Tải dữ liệu từ Django
         loadChargingStationsFromDB()
+        
     }
 
     private fun initViews() {
@@ -229,12 +263,12 @@ class MainActivity : AppCompatActivity() {
         btnSharePlace = findViewById(R.id.btn_share_place)
         btnNearby = findViewById(R.id.btn_nearby)
         btnCloseSheet = findViewById(R.id.btn_close_sheet)
-
+        btnDirections = findViewById(R.id.btn_directions)
         btnBookParking = findViewById(R.id.btn_book_parking)
         btnBookParkingLater = findViewById(R.id.btn_book_parking_later)
         //btnSaveMySpot = findViewById(R.id.btn_save_my_spot)
         //btnFindMySpot = findViewById(R.id.btn_find_my_spot)
-        btnShowParkingList = findViewById(R.id.btn_show_parking_list)
+        //btnShowParkingList = findViewById(R.id.btn_show_parking_list)
         tvLiveOccupancy = findViewById(R.id.tv_live_occupancy)
         btnThemeToggle = findViewById(R.id.btn_theme_toggle)
 
@@ -284,55 +318,401 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun guilenServerDatCho(slot: ChargingSlot) {
-    val sharedPref = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
-    val currentUserEmail = sharedPref.getString("user_email", "Guest") ?: "Guest"
+        val sharedPref = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+        val currentUserEmail = sharedPref.getString("user_email", "Guest") ?: "Guest"
 
-    lifecycleScope.launch {
-        try {
-            val targetStationId = currentPlace?.id ?: 1 
+        lifecycleScope.launch {
+            try {
+                val targetStationId = currentPlace?.id ?: 1
 
-            val response = RetrofitClient.instance.createBooking(
-                userId = currentUserEmail,
-                stationId = targetStationId, 
-                slotId = slot.id,
-                status = "Quick_Booking",
-                scheduledHour = selectedHour
-            )
+                val response = RetrofitClient.instance.createBooking(
+                    userId = currentUserEmail,
+                    stationId = targetStationId,
+                    slotId = slot.id,
+                    status = "Quick_Booking",
+                    scheduledHour = selectedHour
+                )
 
-            if (response.isSuccessful) {
-                val bookingResponse = response.body()
-                currentBookingId = bookingResponse?.id ?: -1
+                if (response.isSuccessful) {
+                    val bookingResponse = response.body()
+                    currentBookingId = bookingResponse?.id ?: -1
+                    loadChargingStationsFromDB()
 
-                // Cập nhật bản đồ chạy nền
-                loadChargingStationsFromDB()
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "✅ Đã giữ ô ${slot.slot_code}! Vui lòng thanh toán trong 10 phút.",
+                            Toast.LENGTH_LONG
+                        ).show()
 
-                // ✅ Bắt buộc chạy trên UI thread để dialog hiện được
-                runOnUiThread {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Đã giữ ô ${slot.slot_code}. Vui lòng thanh toán!",
-                        Toast.LENGTH_LONG
-                    ).show()
+                        bottomSheetBehavior.isHideable = false
+                        bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
 
-                    // Hiện QR dialog
-                    showBookingPayment(currentPlace?.name ?: "Trạm sạc")
+                        // ĐẶT TRƯỚC → hiện QR thanh toán ngay
+                        showBookingPayment(currentPlace?.name ?: "Trạm sạc")
+                    }
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    android.util.Log.e("API_ERROR", "Lỗi: $errorBody")
+                    runOnUiThread {
+                        Toast.makeText(this@MainActivity, "Không thể đặt chỗ!", Toast.LENGTH_SHORT).show()
+                    }
                 }
-
-            } else {
-                val errorBody = response.errorBody()?.string()
-                android.util.Log.e("API_ERROR", "Lỗi đặt chỗ: $errorBody")
-                Toast.makeText(
-                    this@MainActivity,
-                    "Không thể đặt chỗ. Có thể trạm đã hết chỗ!",
-                    Toast.LENGTH_SHORT
-                ).show()
+            } catch (e: Exception) {
+                android.util.Log.e("API_ERROR", "Lỗi kết nối: ${e.message}")
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "Lỗi kết nối Server!", Toast.LENGTH_SHORT).show()
+                }
             }
-        } catch (e: Exception) {
-            android.util.Log.e("API_ERROR", "Lỗi kết nối: ${e.message}")
-            Toast.makeText(this@MainActivity, "Lỗi kết nối Server!", Toast.LENGTH_SHORT).show()
         }
     }
-}
+
+    // Hàm chỉ đường chi tiết thay thế cho showDirections cũ
+    private fun showDetailedDirections() {
+        currentPlace?.let { place ->
+            val myLoc = myLocationOverlay?.myLocation
+            if (myLoc != null) {
+                calculateDetailedRoute(myLoc.latitude, myLoc.longitude, place.lat, place.lon)
+            } else {
+                Toast.makeText(this, "Đang xác định vị trí, vui lòng chờ...", Toast.LENGTH_SHORT).show()
+                myLocationOverlay?.runOnFirstFix {
+                    runOnUiThread {
+                        myLocationOverlay?.myLocation?.let { loc ->
+                            calculateDetailedRoute(loc.latitude, loc.longitude, place.lat, place.lon)
+                        }
+                    }
+                }
+            }
+        } ?: Toast.makeText(this, "Chưa chọn địa điểm đích", Toast.LENGTH_SHORT).show()
+    }
+
+    // Tính route chi tiết với các bước chỉ đường
+    private fun calculateDetailedRoute(fromLat: Double, fromLon: Double, toLat: Double, toLon: Double) {
+        showLoadingDialog("Đang tính toán lộ trình...")
+
+        Thread {
+            try {
+                // Sử dụng API OSRM với steps=true để lấy chi tiết từng bước
+                val urlString = "https://routing.openstreetmap.de/routed-car/route/v1/driving/" +
+                        "$fromLon,$fromLat;$toLon,$toLat?overview=full&geometries=polyline&steps=true"
+
+                val conn = URL(urlString).openConnection() as HttpURLConnection
+                conn.connectTimeout = 20000
+                conn.readTimeout = 20000
+                conn.requestMethod = "GET"
+
+                if (conn.responseCode == 200) {
+                    val json = conn.inputStream.bufferedReader().readText()
+                    val result = JSONObject(json)
+
+                    if (result.getString("code") == "Ok") {
+                        val routes = result.getJSONArray("routes")
+                        if (routes.length() > 0) {
+                            val route = routes.getJSONObject(0)
+                            val geometry = route.getString("geometry")
+                            val totalDistance = route.getDouble("distance")
+                            val totalDuration = route.getDouble("duration")
+
+
+                            // Parse các bước chỉ đường
+                            val legs = route.getJSONArray("legs")
+                            val stepsList = mutableListOf<DirectionStep>()
+
+                            for (i in 0 until legs.length()) {
+                                val leg = legs.getJSONObject(i)
+                                val steps = leg.getJSONArray("steps")
+
+                                for (j in 0 until steps.length()) {
+                                    val step = steps.getJSONObject(j)
+                                    val maneuverObj = step.getJSONObject("maneuver")  // ← Lấy JSONObject maneuver
+
+                                    val instruction = step.getString("name").takeIf { it.isNotEmpty() }
+                                        ?: maneuverObj.getString("type")  // ← Lấy type từ maneuverObj
+
+                                    val stepDistance = step.getDouble("distance")
+                                    val stepDuration = step.getDouble("duration")
+                                    val maneuverType = maneuverObj.getString("type")
+
+                                    // Lấy tọa độ của step
+                                    val startPoint = maneuverObj.getJSONArray("location")
+                                    val stepStartLat = startPoint.getDouble(1)
+                                    val stepStartLon = startPoint.getDouble(0)
+
+                                    stepsList.add(DirectionStep(
+                                        instruction = formatInstruction(instruction, maneuverType),
+                                        distance = formatDistance(stepDistance),
+                                        duration = formatDuration(stepDuration),
+                                        maneuver = maneuverType,
+                                        startLat = stepStartLat,
+                                        startLon = stepStartLon,
+                                        endLat = stepStartLat,
+                                        endLon = stepStartLon
+                                    ))
+                                }
+                            }
+
+                            runOnUiThread {
+                                dismissLoadingDialog()
+                                directionSteps.clear()
+                                directionSteps.addAll(stepsList)
+                                drawDetailedRoute(geometry, totalDistance, totalDuration, stepsList)
+                            }
+                        }
+                    } else {
+                        runOnUiThread {
+                            dismissLoadingDialog()
+                            Toast.makeText(this, "Không thể tìm đường đi!", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } else {
+                    runOnUiThread {
+                        dismissLoadingDialog()
+                        Toast.makeText(this, "Lỗi server: ${conn.responseCode}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                conn.disconnect()
+            } catch (e: Exception) {
+                runOnUiThread {
+                    dismissLoadingDialog()
+                    Toast.makeText(this, "Lỗi: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }.start()
+    }
+
+    // Hiển thị route và bottom sheet hướng dẫn
+    private fun drawDetailedRoute(encodedPolyline: String, totalDistance: Double, totalDuration: Double, steps: List<DirectionStep>) {
+        // Xóa route cũ
+        routeLine?.let { map.overlays.remove(it) }
+
+        // Vẽ route mới
+        val points = decodePolyline(encodedPolyline)
+        routeLine = Polyline().apply {
+            outlinePaint.color = Color.parseColor("#1A73E8")
+            outlinePaint.strokeWidth = 16f
+            outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+            setPoints(points)
+        }
+        map.overlays.add(routeLine)
+
+        // Thêm marker start và finish
+        addStartFinishMarkers(points)
+
+        map.invalidate()
+
+        // Zoom để hiển thị toàn bộ route
+        if (points.isNotEmpty()) {
+            val bounds = org.osmdroid.util.BoundingBox.fromGeoPoints(points)
+            map.zoomToBoundingBox(bounds, true, 50)
+        }
+
+        // Hiển thị bottom sheet hướng dẫn
+        showDirectionsBottomSheet(totalDistance, totalDuration, steps)
+    }
+
+    // Thêm marker điểm đầu và điểm cuối
+    private fun addStartFinishMarkers(points: List<GeoPoint>) {
+        // Xóa marker cũ
+        searchMarker?.let { map.overlays.remove(it) }
+
+        if (points.isNotEmpty()) {
+            // Marker điểm bắt đầu
+            val startMarker = Marker(map).apply {
+                position = points.first()
+                title = "Điểm xuất phát"
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                icon = ContextCompat.getDrawable(this@MainActivity, R.drawable.ic_start)
+            }
+            map.overlays.add(startMarker)
+
+            // Marker điểm kết thúc
+            val endMarker = Marker(map).apply {
+                position = points.last()
+                title = currentPlace?.name ?: "Điểm đến"
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                icon = ContextCompat.getDrawable(this@MainActivity, R.drawable.ic_finish)
+            }
+            map.overlays.add(endMarker)
+
+            parkingMarkers.add(startMarker)
+            parkingMarkers.add(endMarker)
+        }
+    }
+
+    // Hiển thị Bottom Sheet với hướng dẫn chi tiết
+    private fun showDirectionsBottomSheet(totalDistance: Double, totalDuration: Double, steps: List<DirectionStep>) {
+        directionsBottomSheetDialog = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.activity_directions, null)
+        directionsBottomSheetDialog.setContentView(view)
+
+        val tvTotalDistance = view.findViewById<TextView>(R.id.tv_total_distance)
+        val tvTotalDuration = view.findViewById<TextView>(R.id.tv_total_duration)
+        val rvDirections = view.findViewById<RecyclerView>(R.id.rv_directions)
+        val btnStartNavigation = view.findViewById<Button>(R.id.btn_start_navigation)
+
+        tvTotalDistance.text = "📏 Tổng: ${formatDistance(totalDistance)}"
+        tvTotalDuration.text = "⏱ Thời gian: ${formatDuration(totalDuration)}"
+
+        rvDirections.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
+        rvDirections.adapter = DirectionStepAdapter(steps)
+
+        btnStartNavigation.setOnClickListener {
+            directionsBottomSheetDialog.dismiss()
+            startTurnByTurnNavigation(steps)
+        }
+
+        directionsBottomSheetDialog.show()
+    }
+
+    // Bắt đầu chỉ đường turn-by-turn
+    private fun startTurnByTurnNavigation(steps: List<DirectionStep>) {
+        var currentStepIndex = 0
+
+        val navDialog = AlertDialog.Builder(this)
+            .setTitle("🚗 CHỈ DẪN TỪNG BƯỚC")
+            .setMessage("${steps[currentStepIndex].instruction}\n\n📏 ${steps[currentStepIndex].distance} • ⏱ ${steps[currentStepIndex].duration}")
+            .setPositiveButton("Tiếp theo") { _, _ ->
+                if (currentStepIndex + 1 < steps.size) {
+                    currentStepIndex++
+                    // Cập nhật dialog với bước tiếp theo
+                    // Ở đây cần tạo dialog mới hoặc cập nhật
+                    showNextNavigationStep(steps, currentStepIndex)
+                } else {
+                    Toast.makeText(this, "✅ Đã đến nơi!", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton("Đóng") { _, _ -> }
+            .setNeutralButton("Xem bản đồ") { _, _ ->
+                // Zoom đến bước hiện tại
+                val currentStep = steps[currentStepIndex]
+                map.controller.animateTo(GeoPoint(currentStep.startLat, currentStep.startLon))
+                map.controller.setZoom(18.0)
+            }
+            .create()
+
+        navDialog.show()
+    }
+
+    private fun showNextNavigationStep(steps: List<DirectionStep>, index: Int) {
+        AlertDialog.Builder(this)
+            .setTitle("🚗 Bước ${index + 1}/${steps.size}")
+            .setMessage("${steps[index].instruction}\n\n📏 ${steps[index].distance} • ⏱ ${steps[index].duration}")
+            .setPositiveButton("Tiếp theo") { _, _ ->
+                if (index + 1 < steps.size) {
+                    showNextNavigationStep(steps, index + 1)
+                } else {
+                    Toast.makeText(this, "✅ Đã đến nơi!", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton("Đóng") { _, _ -> }
+            .setNeutralButton("Xem bản đồ") { _, _ ->
+                val currentStep = steps[index]
+                map.controller.animateTo(GeoPoint(currentStep.startLat, currentStep.startLon))
+                map.controller.setZoom(18.0)
+            }
+            .show()
+    }
+
+    // Format instruction cho dễ đọc
+    private fun formatInstruction(roadName: String, maneuverType: String): String {
+        val vietnameseInstruction = when {
+            maneuverType.contains("depart") -> "🏁 Xuất phát trên đường $roadName"
+            maneuverType.contains("arrive") -> "📍 Đi đến đích trên đường $roadName"
+            maneuverType.contains("turn left") -> "⬅️ Rẽ trái vào $roadName"
+            maneuverType.contains("turn right") -> "➡️ Rẽ phải vào $roadName"
+            maneuverType.contains("straight") -> "⬆️ Đi thẳng trên $roadName"
+            maneuverType.contains("roundabout") -> "🔄 Đi vòng xuyến, ra tại $roadName"
+            else -> "🚗 Đi theo đường $roadName"
+        }
+        return vietnameseInstruction
+    }
+
+    // Thêm loading dialog
+    private var loadingDialog: AlertDialog? = null
+
+    private fun showLoadingDialog(message: String) {
+        loadingDialog = AlertDialog.Builder(this)
+            .setMessage(message)
+            .setCancelable(false)
+            .create()
+        loadingDialog?.show()
+    }
+
+    private fun dismissLoadingDialog() {
+        loadingDialog?.dismiss()
+        loadingDialog = null
+    }
+
+    private fun startBookingTimerWithPaymentButton(duration: Long, stationName: String, slot: ChargingSlot) {
+        bookingCountDownTimer?.cancel()
+
+        // ← XÓA nút cũ nếu còn tồn tại (tránh addView trùng)
+        val bottomSheetLayout = bottomSheet as LinearLayout
+        val oldBtn = bottomSheetLayout.findViewWithTag<Button>("btn_pay_now")
+        if (oldBtn != null) bottomSheetLayout.removeView(oldBtn)
+
+        // Tạo nút thanh toán
+        val btnPayNow = Button(this).apply {
+            tag = "btn_pay_now"   // ← PHẢI có tag để tìm và xóa sau này
+            text = "💳 Tôi đã đến trạm - Thanh toán"
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#1565C0"))
+            setPadding(48, 24, 48, 24)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(32, 16, 32, 8) }
+        }
+
+        bottomSheetLayout.addView(btnPayNow)
+
+        btnPayNow.setOnClickListener {
+            showBookingPayment(stationName)
+        }
+
+        // ← Thu nhỏ bottom sheet về COLLAPSED thay vì để EXPANDED
+        bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
+
+        bookingCountDownTimer = object : android.os.CountDownTimer(duration, 1000) {
+            override fun onTick(millisUntilFinished: Long) {
+                val minutes = (millisUntilFinished / 1000) / 60
+                val seconds = (millisUntilFinished / 1000) % 60
+                tvPlaceRating.text = "⏳ Giữ chỗ tại $stationName: ${String.format("%02d:%02d", minutes, seconds)}"
+                tvPlaceRating.setTextColor(Color.RED)
+            }
+
+            override fun onFinish() {
+                tvPlaceRating.text = "ĐÃ HẾT HẠN GIỮ CHỖ"
+                tvPlaceRating.setTextColor(Color.GRAY)
+
+                // ← Xóa nút bằng tag thay vì giữ reference (an toàn hơn)
+                val btn = bottomSheetLayout.findViewWithTag<Button>("btn_pay_now")
+                if (btn != null) bottomSheetLayout.removeView(btn)
+
+                if (currentBookingId != -1) {
+                    lifecycleScope.launch {
+                        try {
+                            RetrofitClient.instance.updateBookingStatus(currentBookingId, "Cancelled")
+                            runOnUiThread {
+                                loadChargingStationsFromDB()
+                                displayParkingLots()
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "Đã tự động hủy giữ chỗ!",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                currentBookingId = -1
+                                bottomSheetBehavior.isHideable = true
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("TIMER_ERROR", "Lỗi: ${e.message}")
+                        }
+                    }
+                }
+            }
+        }.start()
+    }
 
     private fun setupMap() {
         // 1. Thiết lập nguồn bản đồ và các điều khiển cơ bản
@@ -477,10 +857,27 @@ class MainActivity : AppCompatActivity() {
         // 4. XỬ LÝ CÁC NÚT ĐẶT CHỖ
         val btnBookNow = findViewById<Button>(R.id.btn_book_parking)
         btnBookNow.setOnClickListener {
-            if (parking.availableChargingSpots > 0) {
-                confirmQuickBooking(parking)
-            } else {
+            if (parking.availableChargingSpots <= 0) {
                 Toast.makeText(this, "Rất tiếc, trạm này hiện đã hết chỗ sạc!", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            // Mở dialog chọn ô, sau khi chọn ô sẽ đặt ngay (không chọn giờ)
+            lifecycleScope.launch {
+                try {
+                    val response = RetrofitClient.instance.getSlots(parking.id)
+                    if (response.isSuccessful) {
+                        val realSlots = response.body() ?: emptyList()
+                        if (realSlots.isNotEmpty()) {
+                            showSlotSelectionForQuickBooking(realSlots, parking)
+                        } else {
+                            Toast.makeText(this@MainActivity, "Trạm này chưa có dữ liệu ô sạc!", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        Toast.makeText(this@MainActivity, "Không thể tải sơ đồ ô sạc!", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(this@MainActivity, "Lỗi kết nối: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
@@ -572,6 +969,178 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    private fun confirmQuickBookingWithHour(slot: ChargingSlot, parking: ParkingLot) {
+        // Tính thời gian di chuyển ước tính
+        val myLoc = myLocationOverlay?.myLocation
+        val estimatedMinutes = if (myLoc != null) {
+            val distanceMeters = calculateDistance(
+                myLoc.latitude, myLoc.longitude, parking.lat, parking.lon
+            )
+            // ~30km/h trong thành phố + 5 phút buffer, tối thiểu 5 phút
+            ((distanceMeters / 30000.0 * 60).toInt() + 5).coerceAtLeast(5)
+        } else {
+            15 // mặc định 15 phút nếu không có GPS
+        }
+
+        val endHour = selectedHour + 2
+        val timeLabel = String.format("%02d:00 – %02d:00", selectedHour, endHour)
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Xác nhận đặt ngay")
+            .setMessage(
+                "Trạm: ${parking.name}\n" +
+                        "Ô sạc: ${slot.slot_code}\n" +
+                        "Khung giờ: $timeLabel\n\n" +
+                        "Bạn có $estimatedMinutes phút để đến trạm.\n" +
+                        "Thanh toán trực tiếp khi đến nơi.\n\n" +
+                        "Nếu không đến kịp, chỗ sẽ tự động hủy."
+            )
+            .setPositiveButton("Xuất phát!") { _, _ ->
+                val userEmail = getLoggedInUserEmail()
+
+                lifecycleScope.launch {
+                    try {
+                        val response = RetrofitClient.instance.createBooking(
+                            userId        = userEmail,
+                            stationId     = parking.id,
+                            slotId        = slot.id,
+                            status        = "Quick_Booking",
+                            scheduledHour = selectedHour
+                        )
+
+                        if (response.isSuccessful) {
+                            val body = response.body()
+                            currentBookingId = body?.id ?: -1
+
+                            loadChargingStationsFromDB()
+
+                            runOnUiThread {
+                                bottomSheetBehavior.isHideable = false
+                                bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
+
+                                // Bắt đầu đếm ngược đến trạm, khi đến bấm nút mới hiện QR
+                                startArrivalCountdown(
+                                    durationMs = estimatedMinutes * 60 * 1000L,
+                                    parking    = parking,
+                                    slotCode   = slot.slot_code
+                                )
+
+                                // Vẽ đường đi trên bản đồ
+                                showDirections()
+
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "⚡ Đã giữ ô ${slot.slot_code}! Hãy đến trạm trong $estimatedMinutes phút.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+
+                        } else {
+                            runOnUiThread {
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "Thất bại! Trạm có thể đã hết chỗ.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("QUICK_BOOK", "Lỗi: ${e.message}")
+                        runOnUiThread {
+                            Toast.makeText(this@MainActivity, "Lỗi kết nối máy chủ!", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
+    }
+    private fun showTimeSlotDialogForQuickBooking(slot: ChargingSlot, parking: ParkingLot) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_time_picker, null)
+        val tvInfo     = dialogView.findViewById<TextView>(R.id.tv_selected_slot_info)
+        val rvTime     = dialogView.findViewById<RecyclerView>(R.id.rv_time_slots)
+        val btnConfirm = dialogView.findViewById<Button>(R.id.btn_confirm_time)
+
+        tvInfo.text = "Ô: ${slot.slot_code} — Chọn khung giờ bắt đầu sạc"
+        selectedHour = -1
+        btnConfirm.visibility = View.GONE
+
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setCancelable(true)
+            .create()
+
+        lifecycleScope.launch {
+            val bookedHours = fetchBookedHours(parking.id, slot.id)
+            val timeSlots = (0..22 step 2).map { h ->
+                TimeSlot(
+                    hour     = h,
+                    label    = String.format("%02d:00 – %02d:00", h, h + 2),
+                    isBooked = h in bookedHours || (h + 1) in bookedHours
+                )
+            }
+            runOnUiThread {
+                rvTime.layoutManager = GridLayoutManager(this@MainActivity, 3)
+                rvTime.adapter = TimeSlotAdapter(timeSlots) { chosen ->
+                    selectedHour = chosen.hour
+                    btnConfirm.visibility = View.VISIBLE
+                    btnConfirm.text = "⚡ ĐẶT NGAY ô ${slot.slot_code}: ${chosen.label}"
+                }
+            }
+        }
+
+        btnConfirm.setOnClickListener {
+            if (selectedHour == -1) {
+                Toast.makeText(this, "Vui lòng chọn khung giờ!", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            dialog.dismiss()
+            // Sau khi chọn giờ → hiện hộp thoại xác nhận rồi đặt chỗ
+            Handler(Looper.getMainLooper()).postDelayed({
+                confirmQuickBookingWithHour(slot, parking)
+            }, 200)
+        }
+
+        dialog.show()
+    }
+
+    private fun showSlotSelectionForQuickBooking(slots: List<ChargingSlot>, parking: ParkingLot) {
+        val dialog = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.dialog_select_slot, null)
+        dialog.setContentView(view)
+
+        val rvSlots = view.findViewById<RecyclerView>(R.id.rv_slots)
+        val btnConfirm = view.findViewById<Button>(R.id.btn_confirm_slot)
+
+        // Đổi tiêu đề cho rõ là đặt ngay
+        //view.findViewById<TextView?>(R.id.tv_slot_dialog_title)?.text = "⚡ Chọn ô sạc — Đặt ngay"
+
+        var selectedSlot: ChargingSlot? = null
+
+        rvSlots.layoutManager = GridLayoutManager(this, 5)
+        rvSlots.adapter = SlotAdapter(slots) { slot ->
+            selectedSlot = slot
+            currentSelectedSlotId = slot.id
+            currentSelectedSlotCode = slot.slot_code
+            btnConfirm.visibility = View.VISIBLE
+            btnConfirm.text = "Chọn giờ cho ô ${slot.slot_code} →"
+        }
+
+        btnConfirm.setOnClickListener {
+            selectedSlot?.let { slot ->
+                currentSelectedSlotId = slot.id
+                currentSelectedSlotCode = slot.slot_code
+                dialog.dismiss()
+                // Sau khi chọn ô → mở chọn giờ (luồng đặt ngay)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    showTimeSlotDialogForQuickBooking(slot, parking)
+                }, 200)
+            }
+        }
+
+        dialog.show()
+    }
+
     private suspend fun fetchBookedHours(stationId: Int, slotId: Int): Set<Int> {
         return try {
             val response = RetrofitClient.instance.getBookedHours(stationId, slotId)
@@ -588,12 +1157,104 @@ class MainActivity : AppCompatActivity() {
         return sharedPref.getString("user_email", "guest@example.com") ?: "guest@example.com"
     }
 
+    private fun startArrivalCountdown(durationMs: Long, parking: ParkingLot, slotCode: String) {
+        bookingCountDownTimer?.cancel()
+
+        // Xóa nút cũ nếu có
+        val bottomSheetLayout = bottomSheet as LinearLayout
+        bottomSheetLayout.findViewWithTag<Button>("btn_pay_now")?.let {
+            bottomSheetLayout.removeView(it)
+        }
+
+        // Tạo nút "Tôi đã đến - Thanh toán"
+        val btnArrived = Button(this).apply {
+            tag = "btn_pay_now"
+            text = "📍 Tôi đã đến trạm - Thanh toán ngay"
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#2E7D32"))
+            setPadding(48, 24, 48, 24)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(32, 16, 32, 8) }
+        }
+        bottomSheetLayout.addView(btnArrived)
+
+        btnArrived.setOnClickListener {
+            // Người dùng đã đến → hủy đếm ngược và mở QR thanh toán
+            bookingCountDownTimer?.cancel()
+            showBookingPayment(parking.name)
+        }
+
+        // Đếm ngược thời gian di chuyển
+        bookingCountDownTimer = object : android.os.CountDownTimer(durationMs, 1000) {
+            override fun onTick(millisUntilFinished: Long) {
+                val minutes = (millisUntilFinished / 1000) / 60
+                val seconds = (millisUntilFinished / 1000) % 60
+                tvPlaceRating.text = "🚗 Đến trạm trong: ${String.format("%02d:%02d", minutes, seconds)}"
+                tvPlaceRating.setTextColor(Color.parseColor("#1565C0"))
+            }
+
+            override fun onFinish() {
+                // Hết thời gian di chuyển → hủy chỗ
+                tvPlaceRating.text = "⛔ Hết thời gian di chuyển"
+                tvPlaceRating.setTextColor(Color.RED)
+
+                bottomSheetLayout.findViewWithTag<Button>("btn_pay_now")?.let {
+                    bottomSheetLayout.removeView(it)
+                }
+
+                if (currentBookingId != -1) {
+                    lifecycleScope.launch {
+                        try {
+                            RetrofitClient.instance.updateBookingStatus(currentBookingId, "Cancelled")
+                            runOnUiThread {
+                                loadChargingStationsFromDB()
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "Đã hủy giữ chỗ vì không đến kịp!",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                                currentBookingId = -1
+                                bottomSheetBehavior.isHideable = true
+                                tvPlaceRating.text = "⚡ Trạm sạc"
+                                tvPlaceRating.setTextColor(Color.parseColor("#4CAF50"))
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("TIMER_ERROR", "Lỗi hủy: ${e.message}")
+                        }
+                    }
+                }
+            }
+        }.start()
+    }
+
     // Hàm phụ: Xác nhận đặt ngay và cảnh báo 10 phút
     private fun confirmQuickBooking(parking: ParkingLot) {
+        // Tính thời gian di chuyển dự kiến (lấy từ OSRM)
+        val myLoc = myLocationOverlay?.myLocation
+        if (myLoc == null) {
+            Toast.makeText(this, "Bật GPS để sử dụng tính năng này!", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Tính khoảng cách chim bay để ước tính thời gian
+        val distanceMeters = calculateDistance(myLoc.latitude, myLoc.longitude, parking.lat, parking.lon)
+        // Ước tính: tốc độ trung bình 30km/h trong thành phố → 1m ≈ 0.12 giây
+        val estimatedSeconds = (distanceMeters * 0.12).toLong().coerceAtLeast(120) // tối thiểu 2 phút
+        val estimatedMinutes = (estimatedSeconds / 60).toInt() + 5 // + 5 phút buffer
+        val totalSeconds = estimatedMinutes * 60L
+
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Xác nhận Đặt chỗ sạc")
-            .setMessage("Hệ thống sẽ giữ chỗ cho bạn tại '${parking.name}' trong vòng 10 phút.")
-            .setPositiveButton("Đồng ý & Chỉ đường") { _, _ ->
+            .setTitle("Xác nhận Đặt chỗ sạc ngay")
+            .setMessage(
+                "Hệ thống sẽ giữ chỗ tại '${parking.name}'.\n\n" +
+                        "⏱ Bạn có khoảng $estimatedMinutes phút để đến trạm.\n" +
+                        "Sau khi đến, bạn sẽ thanh toán trực tiếp tại trạm.\n\n" +
+                        "Nếu không đến kịp, chỗ sẽ bị hủy tự động."
+            )
+            .setPositiveButton("Đồng ý, xuất phát!") { _, _ ->
                 val userEmail = getLoggedInUserEmail()
 
                 lifecycleScope.launch {
@@ -602,36 +1263,41 @@ class MainActivity : AppCompatActivity() {
                             userId = userEmail,
                             stationId = parking.id,
                             slotId = currentSelectedSlotId,
-                            status = "Quick_Booking"
+                            status = "Quick_Booking",
+                            scheduledHour = -1  // đặt ngay, không có giờ cụ thể
                         )
 
                         if (response.isSuccessful) {
                             val body = response.body()
                             currentBookingId = body?.id ?: -1
 
-                            Toast.makeText(this@MainActivity, "Đặt chỗ thành công!", Toast.LENGTH_SHORT).show()
+                            runOnUiThread {
+                                bottomSheetBehavior.isHideable = false
+                                bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
 
-                            // --- SỬA TẠI ĐÂY ---
-                            // 1. Không cho phép người dùng kéo xuống để ẩn hẳn Card
-                            bottomSheetBehavior.isHideable = false
+                                // ĐẶT NGAY → hiện đếm ngược di chuyển, chưa hiện QR
+                                startArrivalCountdown(
+                                    durationMs  = totalSeconds * 1000L,
+                                    parking     = parking,
+                                    slotCode    = currentSelectedSlotCode
+                                )
 
-                            // 2. Đưa về trạng thái thu gọn (hiện một phần thông tin và Timer)
-                            bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
-                            // -------------------
-
-                            lifecycleScope.launch {
-                                loadChargingStationsFromDB()
-                                displayParkingLots()
+                                // Chỉ đường
+                                showDirections()
                             }
 
-                            showDirections()
-                            startBookingTimer(600_000L, parking.name)
+                            loadChargingStationsFromDB()
+
                         } else {
-                            Toast.makeText(this@MainActivity, "Thất bại: Trạm có thể đã hết chỗ!", Toast.LENGTH_SHORT).show()
+                            runOnUiThread {
+                                Toast.makeText(this@MainActivity, "Thất bại: Trạm có thể đã hết chỗ!", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     } catch (e: Exception) {
                         android.util.Log.e("API_ERROR", "Error: ${e.message}")
-                        Toast.makeText(this@MainActivity, "Lỗi kết nối máy chủ!", Toast.LENGTH_SHORT).show()
+                        runOnUiThread {
+                            Toast.makeText(this@MainActivity, "Lỗi kết nối máy chủ!", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
             }
@@ -786,6 +1452,9 @@ class MainActivity : AppCompatActivity() {
         btnVoice.setOnClickListener {
             Toast.makeText(this, "Tính năng đang phát triển", Toast.LENGTH_SHORT).show()
         }
+        btnDirections.setOnClickListener {
+            showDetailedDirections()  // Gọi hàm chỉ đường chi tiết
+        }
 
         val btnThemeToggle = findViewById<ImageButton>(R.id.btn_theme_toggle)
         btnThemeToggle.setOnClickListener {
@@ -799,33 +1468,6 @@ class MainActivity : AppCompatActivity() {
                 AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
             }
         }
-    }
-
-    private fun calculateRouteWalking(fromLat: Double, fromLon: Double, toLat: Double, toLon: Double) {
-        Toast.makeText(this, "Đang tìm đường đi bộ về xe...", Toast.LENGTH_SHORT).show()
-        Thread {
-            try {
-                val url = URL("https://router.project-osrm.org/route/v1/foot/$fromLon,$fromLat;$toLon,$toLat?overview=full&geometries=polyline")
-                val conn = url.openConnection() as HttpURLConnection
-                conn.connectTimeout = 15000
-                conn.readTimeout = 15000
-                if (conn.responseCode == 200) {
-                    val json = conn.inputStream.bufferedReader().readText()
-                    val result = JSONObject(json)
-                    if (result.getString("code") == "Ok") {
-                        val routes = result.getJSONArray("routes")
-                        if (routes.length() > 0) {
-                            val route = routes.getJSONObject(0)
-                            val geometry = route.getString("geometry")
-                            runOnUiThread { drawRoute(geometry) }
-                        }
-                    }
-                }
-                conn.disconnect()
-            } catch (e: Exception) {
-                runOnUiThread { Toast.makeText(this, "Lỗi: ${e.message}", Toast.LENGTH_SHORT).show() }
-            }
-        }.start()
     }
 
     private fun zoomToMyLocation(animate: Boolean) {
@@ -1205,6 +1847,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun showBookingPayment(placeName: String) {
     val dialogView = layoutInflater.inflate(R.layout.dialog_payment_qr, null)
+    val bottomSheetLayout = bottomSheet as LinearLayout
+    val btnPayNow = bottomSheetLayout.findViewWithTag<Button>("btn_pay_now")
+    if (btnPayNow != null) bottomSheetLayout.removeView(btnPayNow)
     val imgQR = dialogView.findViewById<ImageView>(R.id.img_qr_code)
     val tvTimerInDialog = dialogView.findViewById<TextView>(R.id.tv_payment_timer)
     val btnCancel = dialogView.findViewById<Button>(R.id.btn_cancel_payment)
@@ -1213,7 +1858,7 @@ class MainActivity : AppCompatActivity() {
     if (imgQR == null || tvTimerInDialog == null) return
 
     val qrUrl = "https://img.vietqr.io/image/ICB-108876696755-compact.png" +
-                "?amount=499000&addInfo=DatCho_${currentBookingId}"
+                "?amount=100000&addInfo=DatCho_${currentBookingId}"
     Glide.with(this).load(qrUrl).into(imgQR)
 
     // Dùng AlertDialog (không phải BottomSheetDialog)
@@ -1405,39 +2050,51 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun handleBookingExpired() {
-    if (currentBookingId == -1) return  // ← Thêm dòng này để tránh gọi 2 lần
-    bookingCountDownTimer?.cancel()
-    stopAutoCheckPayment()
+        if (currentBookingId == -1) return  // ← Thêm dòng này để tránh gọi 2 lần
+        bookingCountDownTimer?.cancel()
+        stopAutoCheckPayment()
 
-    val expiredId = currentBookingId
-    currentBookingId = -1  // ← Reset NGAY lập tức trước khi gọi API
+        val expiredId = currentBookingId
+        currentBookingId = -1  // ← Reset NGAY lập tức trước khi gọi API
 
-    lifecycleScope.launch {
-        try {
-            RetrofitClient.instance.updateBookingStatus(expiredId, "Cancelled")
-        } catch (e: Exception) {
-            android.util.Log.e("API_ERROR", "Lỗi khi tự động hủy: ${e.message}")
-        }
-        runOnUiThread {
-            loadChargingStationsFromDB()
-            Toast.makeText(this@MainActivity,
-                "Hết thời gian thanh toán! Đặt chỗ đã tự động hủy.",
-                Toast.LENGTH_LONG).show()
-            tvPlaceRating.text = "⭐ 4.8"
-            tvPlaceRating.setTextColor(Color.parseColor("#4CAF50"))
-            bottomSheetBehavior.isHideable = true
+        lifecycleScope.launch {
+            try {
+                RetrofitClient.instance.updateBookingStatus(expiredId, "Cancelled")
+            } catch (e: Exception) {
+                android.util.Log.e("API_ERROR", "Lỗi khi tự động hủy: ${e.message}")
+            }
+            runOnUiThread {
+                val bottomSheetLayout = bottomSheet as LinearLayout
+                val btnPayNow = bottomSheetLayout.findViewWithTag<Button>("btn_pay_now")
+                if (btnPayNow != null) bottomSheetLayout.removeView(btnPayNow)
+                loadChargingStationsFromDB()
+                Toast.makeText(this@MainActivity,
+                    "Hết thời gian thanh toán! Đặt chỗ đã tự động hủy.",
+                    Toast.LENGTH_LONG).show()
+                tvPlaceRating.text = "⭐ 4.8"
+                tvPlaceRating.setTextColor(Color.parseColor("#4CAF50"))
+                bottomSheetBehavior.isHideable = true
+            }
         }
     }
-}
 
     private fun showDirections() {
         currentPlace?.let { place ->
-            myLocationOverlay?.myLocation?.let { myLoc ->
+            val myLoc = myLocationOverlay?.myLocation
+            if (myLoc != null) {
                 calculateRoute(myLoc.latitude, myLoc.longitude, place.lat, place.lon)
-            } ?: run {
-                Toast.makeText(this, "Không thể xác định vị trí hiện tại", Toast.LENGTH_SHORT).show()
+            } else {
+                // Chờ GPS lock rồi mới chỉ đường
+                Toast.makeText(this, "Đang xác định vị trí, vui lòng chờ...", Toast.LENGTH_SHORT).show()
+                myLocationOverlay?.runOnFirstFix {
+                    runOnUiThread {
+                        myLocationOverlay?.myLocation?.let { loc ->
+                            calculateRoute(loc.latitude, loc.longitude, place.lat, place.lon)
+                        }
+                    }
+                }
             }
-        }
+        } ?: Toast.makeText(this, "Chưa chọn địa điểm đích", Toast.LENGTH_SHORT).show()
     }
 
     private fun calculateRoute(fromLat: Double, fromLon: Double, toLat: Double, toLon: Double) {
@@ -1445,12 +2102,20 @@ class MainActivity : AppCompatActivity() {
 
         Thread {
             try {
-                val url = URL("https://router.project-osrm.org/route/v1/driving/$fromLon,$fromLat;$toLon,$toLat?overview=full&geometries=polyline")
-                val conn = url.openConnection() as HttpURLConnection
-                conn.connectTimeout = 15000
-                conn.readTimeout = 15000
+                val urlString = "https://routing.openstreetmap.de/routed-car/route/v1/driving/" +
+                        "$fromLon,$fromLat;$toLon,$toLat?overview=full&geometries=polyline"
 
-                if (conn.responseCode == 200) {
+                android.util.Log.d("ROUTE", "Calling: $urlString")  // ← thêm log để debug
+
+                val conn = URL(urlString).openConnection() as HttpURLConnection
+                conn.connectTimeout = 20000  // tăng lên 20s
+                conn.readTimeout = 20000
+                conn.requestMethod = "GET"
+
+                val responseCode = conn.responseCode
+                android.util.Log.d("ROUTE", "Response: $responseCode")
+
+                if (responseCode == 200) {
                     val json = conn.inputStream.bufferedReader().readText()
                     val result = JSONObject(json)
 
@@ -1464,23 +2129,28 @@ class MainActivity : AppCompatActivity() {
 
                             runOnUiThread {
                                 drawRoute(geometry)
-                                val distText = formatDistance(distance)
-                                val timeText = formatDuration(duration)
-                                Toast.makeText(this, "Khoảng cách: $distText • Thời gian: $timeText",
-                                    Toast.LENGTH_LONG).show()
+                                Toast.makeText(
+                                    this,
+                                    "Khoảng cách: ${formatDistance(distance)} • ${formatDuration(duration)}",
+                                    Toast.LENGTH_LONG
+                                ).show()
                             }
                         }
                     } else {
                         runOnUiThread {
-                            Toast.makeText(this, "Không tìm thấy đường đi", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, "Không tìm thấy đường đi!", Toast.LENGTH_SHORT).show()
                         }
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(this, "Lỗi server: $responseCode", Toast.LENGTH_SHORT).show()
                     }
                 }
                 conn.disconnect()
             } catch (e: Exception) {
-                e.printStackTrace()
+                android.util.Log.e("ROUTE", "Error: ${e.message}")
                 runOnUiThread {
-                    Toast.makeText(this, "Không thể tính toán: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Lỗi kết nối: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
         }.start()
@@ -1560,7 +2230,7 @@ class MainActivity : AppCompatActivity() {
             Thread {
                 try {
 
-                    val urlString = "https://router.project-osrm.org/route/v1/driving/" +
+                    val urlString = "https://routing.openstreetmap.de/routed-car/route/v1/driving/" +
                             "${myLoc.longitude},${myLoc.latitude};${parking.lon},${parking.lat}?overview=false"
 
                     val url = URL(urlString)
@@ -1740,6 +2410,10 @@ class MainActivity : AppCompatActivity() {
                     if (parkingLots.isNotEmpty()) {
                         displayParkingLots(parkingLots)
                         updateWardChips()
+                        if (currentBookingId != -1) {
+                            bottomSheetBehavior.isHideable = false
+                            bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
+                        }
                     }
                 }
 
@@ -1812,10 +2486,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showAndSaveInvoice(bookingId: Int, slotCode: String, stationName: String, scheduledHour: Int) {
-        // 1. Tạo View hóa đơn từ layout
         val invoiceView = layoutInflater.inflate(R.layout.layout_invoice, null)
 
-        // Điền thông tin vào hóa đơn
         invoiceView.findViewById<TextView>(R.id.tv_invoice_id).text = "Mã HĐ: #${bookingId}"
         invoiceView.findViewById<TextView>(R.id.tv_invoice_station).text = "Trạm: $stationName"
         invoiceView.findViewById<TextView>(R.id.tv_invoice_slot).text = "Ô sạc: $slotCode"
@@ -1828,10 +2500,9 @@ class MainActivity : AppCompatActivity() {
         invoiceView.findViewById<TextView>(R.id.tv_invoice_date).text =
             "Thời gian: ${sdf.format(java.util.Date())}"
 
-        invoiceView.findViewById<TextView>(R.id.tv_invoice_amount).text = "Số tiền: 499.000 VNĐ"
+        invoiceView.findViewById<TextView>(R.id.tv_invoice_amount).text = "Số tiền: 100.000 VNĐ"
         invoiceView.findViewById<TextView>(R.id.tv_invoice_status).text = "✅ ĐÃ THANH TOÁN"
 
-        // 2. Đo và render View thành Bitmap
         invoiceView.measure(
             View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
@@ -1846,84 +2517,59 @@ class MainActivity : AppCompatActivity() {
         val canvas = android.graphics.Canvas(bitmap)
         invoiceView.draw(canvas)
 
-        // 3. Lưu ảnh vào thư mục Pictures
-        val fileName = "HoaDon_${bookingId}_${System.currentTimeMillis()}.png"
-        val savedUri = saveInvoiceBitmap(bitmap, fileName)
+        // ← XÓA 2 dòng này:
+        // val fileName = "HoaDon_${bookingId}_${System.currentTimeMillis()}.png"
+        // val savedUri = saveInvoiceBitmap(bitmap, fileName)
 
-        // 4. Hiện dialog xem trước hóa đơn
-        showInvoicePreviewDialog(bitmap, savedUri)
+        // Chỉ hiện dialog, KHÔNG tự lưu
+        showInvoicePreviewDialog(bitmap)
     }
 
-    private fun saveInvoiceBitmap(bitmap: android.graphics.Bitmap, fileName: String): android.net.Uri? {
-        return try {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                // Android 10+ dùng MediaStore
-                val contentValues = android.content.ContentValues().apply {
-                    put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, fileName)
-                    put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
-                    put(android.provider.MediaStore.Images.Media.RELATIVE_PATH,
-                        android.os.Environment.DIRECTORY_PICTURES + "/HoaDonSac")
-                }
-                val uri = contentResolver.insert(
-                    android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                    contentValues
-                )
-                uri?.let {
-                    contentResolver.openOutputStream(it)?.use { out ->
-                        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
-                    }
-                }
-                uri
-            } else {
-                // Android 9 trở xuống
-                val dir = java.io.File(
-                    android.os.Environment.getExternalStoragePublicDirectory(
-                        android.os.Environment.DIRECTORY_PICTURES), "HoaDonSac"
-                )
-                if (!dir.exists()) dir.mkdirs()
-                val file = java.io.File(dir, fileName)
-                java.io.FileOutputStream(file).use { out ->
-                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
-                }
-                android.net.Uri.fromFile(file)
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("INVOICE", "Lỗi lưu ảnh: ${e.message}")
-            null
-        }
-    }
-
-    private fun showInvoicePreviewDialog(bitmap: android.graphics.Bitmap, savedUri: android.net.Uri?) {
+    private fun showInvoicePreviewDialog(bitmap: android.graphics.Bitmap) {
         val dialogView = layoutInflater.inflate(R.layout.dialog_invoice_preview, null)
         val imgInvoice = dialogView.findViewById<ImageView>(R.id.img_invoice_preview)
         val tvSaveStatus = dialogView.findViewById<TextView>(R.id.tv_save_status)
         val btnShare = dialogView.findViewById<Button>(R.id.btn_share_invoice)
         val btnClose = dialogView.findViewById<Button>(R.id.btn_close_invoice)
+        val btnDownload = dialogView.findViewById<Button>(R.id.btn_download_invoice)
 
         imgInvoice.setImageBitmap(bitmap)
-
-        if (savedUri != null) {
-            tvSaveStatus.text = "✅ Đã lưu vào Thư viện ảnh / Pictures/HoaDonSac"
-            tvSaveStatus.setTextColor(Color.parseColor("#4CAF50"))
-        } else {
-            tvSaveStatus.text = "⚠️ Không thể lưu ảnh tự động"
-            tvSaveStatus.setTextColor(Color.parseColor("#FF9800"))
-        }
+        tvSaveStatus.text = "Nhấn tải xuống để lưu hóa đơn vào máy"
+        tvSaveStatus.setTextColor(Color.parseColor("#1565C0"))
 
         val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
             .setView(dialogView)
             .setCancelable(false)
             .create()
 
+        // Nút tải xuống → mở hộp thoại chọn nơi lưu
+        btnDownload.setOnClickListener {
+            pendingInvoiceBitmap = bitmap
+            val fileName = "HoaDon_${System.currentTimeMillis()}.png"
+            saveInvoiceLauncher.launch(fileName)
+        }
+
+        // Nút chia sẻ → dùng URI tạm trong cache
         btnShare.setOnClickListener {
-            savedUri?.let { uri ->
+            try {
+                val cacheFile = java.io.File(cacheDir, "invoice_share.png")
+                java.io.FileOutputStream(cacheFile).use { out ->
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                }
+                val shareUri = androidx.core.content.FileProvider.getUriForFile(
+                    this,
+                    "${packageName}.provider",
+                    cacheFile
+                )
                 val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                     type = "image/png"
-                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                    putExtra(android.content.Intent.EXTRA_STREAM, shareUri)
                     addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
                 startActivity(android.content.Intent.createChooser(shareIntent, "Chia sẻ hóa đơn"))
-            } ?: Toast.makeText(this, "Không có file để chia sẻ!", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, "Lỗi chia sẻ: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
         }
 
         btnClose.setOnClickListener { dialog.dismiss() }
