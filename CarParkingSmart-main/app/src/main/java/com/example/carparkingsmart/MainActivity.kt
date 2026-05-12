@@ -64,6 +64,7 @@ class MainActivity : AppCompatActivity() {
     private var currentSelectedSlotCode: String = ""
 
     private lateinit var map: MapView
+    private lateinit var btnDetailedDirections: Button
     private lateinit var searchBox: AutoCompleteTextView
     private lateinit var btnVoice: ImageButton
     private lateinit var btnMyLocation: ImageButton
@@ -194,6 +195,31 @@ class MainActivity : AppCompatActivity() {
     private val chargingRequestQueue = mutableListOf<ChargingRequest>()
     private var currentNearestChargingStation: ParkingLot? = null
 
+    private var navigationManager: NavigationManager? = null
+    private var isNavigating = false
+    private lateinit var navHud: LinearLayout
+    private lateinit var tvNavInstruction: TextView
+    private lateinit var tvNavRoadName: TextView
+    private lateinit var tvNavDistanceToTurn: TextView
+    private lateinit var tvNavDistanceUnit: TextView
+    private lateinit var tvNavTimeRemaining: TextView
+    private lateinit var tvNavTotalDistance: TextView
+    private lateinit var tvNavStepCounter: TextView
+    private lateinit var tvNavManeuverIcon: TextView
+    private lateinit var btnNavStop: Button
+    private lateinit var btnNavMute: ImageButton
+    private lateinit var navArrivalBanner: LinearLayout
+
+    private val locationListener = object : android.location.LocationListener {
+        override fun onLocationChanged(location: android.location.Location) {
+            if (isNavigating) {
+                navigationManager?.updateLocation(location.latitude, location.longitude)
+            }
+        }
+        override fun onStatusChanged(provider: String?, status: Int, extras: android.os.Bundle?) {}
+        override fun onProviderEnabled(provider: String) {}
+        override fun onProviderDisabled(provider: String) {}
+    }
     // Thêm vào đầu class MainActivity, cạnh các biến lateinit
     private var pendingInvoiceBitmap: android.graphics.Bitmap? = null
 
@@ -240,7 +266,7 @@ class MainActivity : AppCompatActivity() {
 
         // setupCategoryChips() <-- Tạm thời comment dòng này lại nếu hàm này bên dưới vẫn đang gọi đến các chipRestaurant cũ
 
-        // Tải dữ liệu từ Django
+        initNavHud()
         loadChargingStationsFromDB()
         
     }
@@ -266,11 +292,9 @@ class MainActivity : AppCompatActivity() {
         btnDirections = findViewById(R.id.btn_directions)
         btnBookParking = findViewById(R.id.btn_book_parking)
         btnBookParkingLater = findViewById(R.id.btn_book_parking_later)
-        //btnSaveMySpot = findViewById(R.id.btn_save_my_spot)
-        //btnFindMySpot = findViewById(R.id.btn_find_my_spot)
-        //btnShowParkingList = findViewById(R.id.btn_show_parking_list)
         tvLiveOccupancy = findViewById(R.id.tv_live_occupancy)
         btnThemeToggle = findViewById(R.id.btn_theme_toggle)
+        btnDetailedDirections = findViewById(R.id.btn_detailed_directions)
 
         val btnLogout = findViewById<ImageButton>(R.id.btn_logout_map)
         btnLogout.setOnClickListener {
@@ -315,6 +339,30 @@ class MainActivity : AppCompatActivity() {
         }
 
         dialog.show()
+    }
+
+    private fun initNavHud() {
+        navHud = findViewById<LinearLayout>(R.id.navigation_hud)
+        tvNavManeuverIcon   = navHud.findViewById(R.id.tv_nav_maneuver_icon)
+        tvNavInstruction    = navHud.findViewById(R.id.tv_nav_instruction)
+        tvNavRoadName       = navHud.findViewById(R.id.tv_nav_road_name)
+        tvNavDistanceToTurn = navHud.findViewById(R.id.tv_nav_distance_to_turn)
+        tvNavDistanceUnit   = navHud.findViewById(R.id.tv_nav_distance_unit)
+        tvNavTimeRemaining  = navHud.findViewById(R.id.tv_nav_time_remaining)
+        tvNavTotalDistance  = navHud.findViewById(R.id.tv_nav_total_distance)
+        tvNavStepCounter    = navHud.findViewById(R.id.tv_nav_step_counter)
+        btnNavStop          = navHud.findViewById(R.id.btn_nav_stop)
+        btnNavMute          = navHud.findViewById(R.id.btn_nav_mute)
+        navArrivalBanner    = navHud.findViewById(R.id.nav_arrival_banner)
+
+        btnNavStop.setOnClickListener { stopNavigation() }
+        btnNavMute.setOnClickListener {
+            val nowOn = navigationManager?.toggleMute() ?: false
+            btnNavMute.setImageResource(
+                if (nowOn) android.R.drawable.ic_lock_silent_mode_off
+                else android.R.drawable.ic_lock_silent_mode
+            )
+        }
     }
 
     private fun guilenServerDatCho(slot: ChargingSlot) {
@@ -439,14 +487,15 @@ class MainActivity : AppCompatActivity() {
                                     val stepStartLon = startPoint.getDouble(0)
 
                                     stepsList.add(DirectionStep(
-                                        instruction = formatInstruction(instruction, maneuverType),
-                                        distance = formatDistance(stepDistance),
-                                        duration = formatDuration(stepDuration),
-                                        maneuver = maneuverType,
-                                        startLat = stepStartLat,
-                                        startLon = stepStartLon,
-                                        endLat = stepStartLat,
-                                        endLon = stepStartLon
+                                        instruction = buildStepInstruction(maneuverType, instruction),
+                                        distance    = formatDistance(stepDistance),
+                                        duration    = formatDuration(stepDuration),
+                                        maneuver    = maneuverType,
+                                        roadName    = instruction,
+                                        startLat    = stepStartLat,
+                                        startLon    = stepStartLon,
+                                        endLat      = stepStartLat,
+                                        endLon      = stepStartLon
                                     ))
                                 }
                             }
@@ -455,7 +504,6 @@ class MainActivity : AppCompatActivity() {
                                 dismissLoadingDialog()
                                 directionSteps.clear()
                                 directionSteps.addAll(stepsList)
-                                drawDetailedRoute(geometry, totalDistance, totalDuration, stepsList)
                             }
                         }
                     } else {
@@ -480,35 +528,7 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    // Hiển thị route và bottom sheet hướng dẫn
-    private fun drawDetailedRoute(encodedPolyline: String, totalDistance: Double, totalDuration: Double, steps: List<DirectionStep>) {
-        // Xóa route cũ
-        routeLine?.let { map.overlays.remove(it) }
 
-        // Vẽ route mới
-        val points = decodePolyline(encodedPolyline)
-        routeLine = Polyline().apply {
-            outlinePaint.color = Color.parseColor("#1A73E8")
-            outlinePaint.strokeWidth = 16f
-            outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
-            setPoints(points)
-        }
-        map.overlays.add(routeLine)
-
-        // Thêm marker start và finish
-        addStartFinishMarkers(points)
-
-        map.invalidate()
-
-        // Zoom để hiển thị toàn bộ route
-        if (points.isNotEmpty()) {
-            val bounds = org.osmdroid.util.BoundingBox.fromGeoPoints(points)
-            map.zoomToBoundingBox(bounds, true, 50)
-        }
-
-        // Hiển thị bottom sheet hướng dẫn
-        showDirectionsBottomSheet(totalDistance, totalDuration, steps)
-    }
 
     // Thêm marker điểm đầu và điểm cuối
     private fun addStartFinishMarkers(points: List<GeoPoint>) {
@@ -539,59 +559,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Hiển thị Bottom Sheet với hướng dẫn chi tiết
-    private fun showDirectionsBottomSheet(totalDistance: Double, totalDuration: Double, steps: List<DirectionStep>) {
-        directionsBottomSheetDialog = BottomSheetDialog(this)
-        val view = layoutInflater.inflate(R.layout.activity_directions, null)
-        directionsBottomSheetDialog.setContentView(view)
 
-        val tvTotalDistance = view.findViewById<TextView>(R.id.tv_total_distance)
-        val tvTotalDuration = view.findViewById<TextView>(R.id.tv_total_duration)
-        val rvDirections = view.findViewById<RecyclerView>(R.id.rv_directions)
-        val btnStartNavigation = view.findViewById<Button>(R.id.btn_start_navigation)
-
-        tvTotalDistance.text = "📏 Tổng: ${formatDistance(totalDistance)}"
-        tvTotalDuration.text = "⏱ Thời gian: ${formatDuration(totalDuration)}"
-
-        rvDirections.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
-        rvDirections.adapter = DirectionStepAdapter(steps)
-
-        btnStartNavigation.setOnClickListener {
-            directionsBottomSheetDialog.dismiss()
-            startTurnByTurnNavigation(steps)
-        }
-
-        directionsBottomSheetDialog.show()
-    }
-
-    // Bắt đầu chỉ đường turn-by-turn
-    private fun startTurnByTurnNavigation(steps: List<DirectionStep>) {
-        var currentStepIndex = 0
-
-        val navDialog = AlertDialog.Builder(this)
-            .setTitle("🚗 CHỈ DẪN TỪNG BƯỚC")
-            .setMessage("${steps[currentStepIndex].instruction}\n\n📏 ${steps[currentStepIndex].distance} • ⏱ ${steps[currentStepIndex].duration}")
-            .setPositiveButton("Tiếp theo") { _, _ ->
-                if (currentStepIndex + 1 < steps.size) {
-                    currentStepIndex++
-                    // Cập nhật dialog với bước tiếp theo
-                    // Ở đây cần tạo dialog mới hoặc cập nhật
-                    showNextNavigationStep(steps, currentStepIndex)
-                } else {
-                    Toast.makeText(this, "✅ Đã đến nơi!", Toast.LENGTH_LONG).show()
-                }
-            }
-            .setNegativeButton("Đóng") { _, _ -> }
-            .setNeutralButton("Xem bản đồ") { _, _ ->
-                // Zoom đến bước hiện tại
-                val currentStep = steps[currentStepIndex]
-                map.controller.animateTo(GeoPoint(currentStep.startLat, currentStep.startLon))
-                map.controller.setZoom(18.0)
-            }
-            .create()
-
-        navDialog.show()
-    }
 
     private fun showNextNavigationStep(steps: List<DirectionStep>, index: Int) {
         AlertDialog.Builder(this)
@@ -613,19 +581,6 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    // Format instruction cho dễ đọc
-    private fun formatInstruction(roadName: String, maneuverType: String): String {
-        val vietnameseInstruction = when {
-            maneuverType.contains("depart") -> "🏁 Xuất phát trên đường $roadName"
-            maneuverType.contains("arrive") -> "📍 Đi đến đích trên đường $roadName"
-            maneuverType.contains("turn left") -> "⬅️ Rẽ trái vào $roadName"
-            maneuverType.contains("turn right") -> "➡️ Rẽ phải vào $roadName"
-            maneuverType.contains("straight") -> "⬆️ Đi thẳng trên $roadName"
-            maneuverType.contains("roundabout") -> "🔄 Đi vòng xuyến, ra tại $roadName"
-            else -> "🚗 Đi theo đường $roadName"
-        }
-        return vietnameseInstruction
-    }
 
     // Thêm loading dialog
     private var loadingDialog: AlertDialog? = null
@@ -1786,12 +1741,19 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // --- CÁC NÚT HÀNH ĐỘNG KHÁC ---
         btnDirectionsBottom.setOnClickListener {
             currentPlace?.let {
+                // Ẩn nút cũ, hiện nút chi tiết
+                btnDirectionsBottom.visibility = View.GONE
+                btnDetailedDirections.visibility = View.VISIBLE
+
                 showDirections()
                 bottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
             } ?: Toast.makeText(this, "Chưa chọn địa điểm đích", Toast.LENGTH_SHORT).show()
+        }
+
+        btnDetailedDirections.setOnClickListener {
+            showDetailedDirections()
         }
 
         btnSharePlace.setOnClickListener {
@@ -1822,6 +1784,10 @@ class MainActivity : AppCompatActivity() {
         searchMarker?.let { map.overlays.remove(it); searchMarker = null }
         map.invalidate()
         currentPlace = null
+
+        // Reset lại nút chỉ đường
+        btnDirectionsBottom.visibility = View.VISIBLE
+        btnDetailedDirections.visibility = View.GONE
     }
 
     private fun showPlaceDetails(lat: Double, lon: Double, name: String, address: String, category: String = "") {
@@ -2095,6 +2061,133 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         } ?: Toast.makeText(this, "Chưa chọn địa điểm đích", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun startRealTimeNavigation(steps: List<DirectionStep>) {
+        if (steps.isEmpty()) return
+        isNavigating = true
+        navHud.visibility = View.VISIBLE
+        navArrivalBanner.visibility = View.GONE
+        navHud.getChildAt(0)?.visibility = View.VISIBLE
+        navHud.getChildAt(1)?.visibility = View.VISIBLE
+
+        updateHudStep(0, steps[0], 0.0)
+        tvNavTotalDistance.text = calculateTotalDistance(steps)
+        tvNavStepCounter.text = "Bước 1/${steps.size}"
+
+        navigationManager = NavigationManager(
+            context = this,
+            steps = steps,
+            onStepChanged = { stepIndex, step, distToTurn ->
+                runOnUiThread {
+                    updateHudStep(stepIndex, step, distToTurn)
+                    tvNavStepCounter.text = "Bước ${stepIndex + 1}/${steps.size}"
+                }
+            },
+            onArrived = {
+                runOnUiThread { showArrivalAnimation() }
+            },
+            onDistanceUpdate = { distToTurn, timeRemaining ->
+                runOnUiThread {
+                    if (distToTurn >= 1000) {
+                        tvNavDistanceToTurn.text = "%.1f".format(distToTurn / 1000)
+                        tvNavDistanceUnit.text = "km"
+                    } else {
+                        tvNavDistanceToTurn.text = distToTurn.toInt().toString()
+                        tvNavDistanceUnit.text = "mét"
+                    }
+                    tvNavTimeRemaining.text = timeRemaining
+                }
+            }
+        )
+        navigationManager?.start()
+        startHighFrequencyGPS()
+    }
+
+    private fun updateHudStep(stepIndex: Int, step: DirectionStep, distanceToTurn: Double) {
+        tvNavManeuverIcon.text = step.maneuverIcon()
+        tvNavInstruction.text  = step.instruction
+        tvNavRoadName.text     = step.roadName
+        if (distanceToTurn > 0) {
+            if (distanceToTurn >= 1000) {
+                tvNavDistanceToTurn.text = "%.1f".format(distanceToTurn / 1000)
+                tvNavDistanceUnit.text = "km"
+            } else {
+                tvNavDistanceToTurn.text = distanceToTurn.toInt().toString()
+                tvNavDistanceUnit.text = "mét"
+            }
+        }
+        try {
+            val cardView = navHud.getChildAt(0) as? com.google.android.material.card.MaterialCardView
+            cardView?.setCardBackgroundColor(android.graphics.Color.parseColor(step.hudColor()))
+        } catch (e: Exception) {}
+    }
+
+    private fun showArrivalAnimation() {
+        navArrivalBanner.visibility = View.VISIBLE
+        navHud.getChildAt(0)?.visibility = View.GONE
+        navHud.getChildAt(1)?.visibility = View.GONE
+        Handler(Looper.getMainLooper()).postDelayed({ stopNavigation() }, 4000)
+        Toast.makeText(this, "🎉 Bạn đã đến trạm sạc!", Toast.LENGTH_LONG).show()
+    }
+
+    private fun stopNavigation() {
+        isNavigating = false
+        navigationManager?.stop()
+        navigationManager = null
+        navHud.visibility = View.GONE
+        navArrivalBanner.visibility = View.GONE
+        navHud.getChildAt(0)?.visibility = View.VISIBLE
+        navHud.getChildAt(1)?.visibility = View.VISIBLE
+        stopHighFrequencyGPS()
+        Toast.makeText(this, "Đã dừng chỉ đường", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun startHighFrequencyGPS() {
+        try {
+            val lm = getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED) {
+                lm.requestLocationUpdates(android.location.LocationManager.GPS_PROVIDER, 2000L, 5f, locationListener)
+            }
+        } catch (e: Exception) {}
+    }
+
+    private fun stopHighFrequencyGPS() {
+        try {
+            val lm = getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+            lm.removeUpdates(locationListener)
+        } catch (e: Exception) {}
+    }
+
+    private fun calculateTotalDistance(steps: List<DirectionStep>): String {
+        var totalMeters = 0.0
+        steps.forEach { step ->
+            val dist = step.distance
+            when {
+                dist.contains("km") -> totalMeters += dist.replace("km","").trim().toDoubleOrNull()?.times(1000) ?: 0.0
+                dist.contains("m")  -> totalMeters += dist.replace("m","").trim().toDoubleOrNull() ?: 0.0
+            }
+        }
+        return if (totalMeters >= 1000) "%.1f km".format(totalMeters/1000) else "${totalMeters.toInt()} m"
+    }
+
+    private fun buildStepInstruction(maneuverType: String, roadName: String): String {
+        val road = roadName.ifEmpty { "đường phía trước" }
+        return when {
+            maneuverType == "depart"                                  -> "Xuất phát trên $road"
+            maneuverType == "arrive"                                  -> "Đã đến đích"
+            maneuverType.contains("left") && maneuverType.contains("sharp")  -> "Rẽ gấp trái vào $road"
+            maneuverType.contains("left") && maneuverType.contains("slight") -> "Đi chếch trái vào $road"
+            maneuverType.contains("left")                             -> "Rẽ trái vào $road"
+            maneuverType.contains("right") && maneuverType.contains("sharp") -> "Rẽ gấp phải vào $road"
+            maneuverType.contains("right") && maneuverType.contains("slight")-> "Đi chếch phải vào $road"
+            maneuverType.contains("right")                            -> "Rẽ phải vào $road"
+            maneuverType.contains("u-turn")                           -> "Quay đầu xe"
+            maneuverType.contains("roundabout")                       -> "Đi vào vòng xuyến, rẽ ra tại $road"
+            maneuverType.contains("merge")                            -> "Nhập làn vào $road"
+            else                                                      -> "Đi thẳng trên $road"
+        }
     }
 
     private fun calculateRoute(fromLat: Double, fromLon: Double, toLat: Double, toLon: Double) {
@@ -2446,6 +2539,8 @@ class MainActivity : AppCompatActivity() {
         searchHandler.removeCallbacksAndMessages(null)
         updateHandler.removeCallbacksAndMessages(null)
         notificationHandler.removeCallbacksAndMessages(null)
+        navigationManager?.stop()
+        stopHighFrequencyGPS()
     }
 
     // --- PHẦN XỬ LÝ ĐĂNG XUẤT (MENU) ---
