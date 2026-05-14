@@ -110,8 +110,22 @@ class Booking(models.Model):
                 
         
             elif self.slot:
+        # Kiểm tra xem có booking Quick_Booking nào đang giữ slot này không
+                existing = Booking.objects.filter(
+                    slot=self.slot,
+                    status='Quick_Booking'
+                ).first()
+                
+                if existing:
+                    # Tự động hủy booking cũ chưa thanh toán để nhường chỗ
+                    existing.status = 'Cancelled'
+                    existing.save()  # Sẽ trigger restore slot trong save()
+            
+                # Sau khi hủy xong, kiểm tra lại
+                self.slot.refresh_from_db()
                 if not self.slot.is_available:
                     raise ValidationError("Ô sạc này hiện đang có người sử dụng!")
+                
                 self.slot.is_available = False
                 self.slot.save()
 
