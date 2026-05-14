@@ -379,28 +379,55 @@ class MainActivity : AppCompatActivity() {
         ivManeuverIcon.setImageResource(iconRes)
     }
 
-
-    /**
-     * Sửa lại hàm showDirections để gọi navigation
-     */
-    private fun showDirections() {
-        currentPlace?.let { place ->
-            androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Bắt đầu chỉ đường?")
-                .setMessage("Chỉ đường đến ${place.name} với hướng dẫn giọng nói?")
-                .setPositiveButton("Bắt đầu") { _, _ ->
-                    startNavigationToDestination()
-                }
-                .setNegativeButton("Hủy", null)
-                .show()
+    private fun showDirectionsBottomSheet(
+        totalDistance: Double,
+        totalDuration: Double,
+        steps: List<DirectionStep>
+    ) {
+        // Đóng dialog cũ nếu đang mở
+        if (::directionsBottomSheetDialog.isInitialized && directionsBottomSheetDialog.isShowing) {
+            directionsBottomSheetDialog.dismiss()
         }
+
+        directionsBottomSheetDialog = BottomSheetDialog(this)  // ← gán vào biến class
+        val view = layoutInflater.inflate(R.layout.activity_directions, null)
+        directionsBottomSheetDialog.setContentView(view)
+
+        view.findViewById<TextView>(R.id.tv_total_distance).text =
+            "📏 ${formatDistance(totalDistance)}"
+        view.findViewById<TextView>(R.id.tv_total_duration).text =
+            "⏱ ${formatDuration(totalDuration)}"
+
+        val rv = view.findViewById<RecyclerView>(R.id.rv_directions)
+        rv.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
+        rv.adapter = DirectionStepAdapter(steps)
+
+        view.findViewById<Button>(R.id.btn_start_navigation).setOnClickListener {
+            directionsBottomSheetDialog.dismiss()
+            startRealTimeNavigation(steps)
+        }
+
+        directionsBottomSheetDialog.show()
     }
 
-    /*override fun onDestroy() {
-        super.onDestroy()
-        navigationEngine?.cleanup()
-        fusedLocationClient?.removeLocationUpdates(locationCallback!!)
-    }*/
+    private fun showDirections() {
+        currentPlace?.let { place ->
+            val myLoc = myLocationOverlay?.myLocation
+            if (myLoc != null) {
+                calculateRoute(myLoc.latitude, myLoc.longitude, place.lat, place.lon)
+            } else {
+                Toast.makeText(this, "Đang xác định vị trí, vui lòng chờ...", Toast.LENGTH_SHORT).show()
+                myLocationOverlay?.runOnFirstFix {
+                    runOnUiThread {
+                        myLocationOverlay?.myLocation?.let { loc ->
+                            calculateRoute(loc.latitude, loc.longitude, place.lat, place.lon)
+                        }
+                    }
+                }
+            }
+        } ?: Toast.makeText(this, "Chưa chọn địa điểm đích", Toast.LENGTH_SHORT).show()
+    }
+
 
 
 
@@ -583,23 +610,40 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Hàm chỉ đường chi tiết thay thế cho showDirections cũ
+
+
+
     private fun showDetailedDirections() {
         currentPlace?.let { place ->
-            val myLoc = myLocationOverlay?.myLocation
-            if (myLoc != null) {
-                calculateDetailedRoute(myLoc.latitude, myLoc.longitude, place.lat, place.lon)
-            } else {
-                Toast.makeText(this, "Đang xác định vị trí, vui lòng chờ...", Toast.LENGTH_SHORT).show()
-                myLocationOverlay?.runOnFirstFix {
-                    runOnUiThread {
-                        myLocationOverlay?.myLocation?.let { loc ->
-                            calculateDetailedRoute(loc.latitude, loc.longitude, place.lat, place.lon)
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Bắt đầu chỉ đường?")
+                .setMessage("Chỉ đường đến ${place.name} với hướng dẫn giọng nói?")
+                .setPositiveButton("Bắt đầu") { _, _ ->
+                    val myLoc = myLocationOverlay?.myLocation
+                    if (myLoc != null) {
+                        calculateDetailedRoute(myLoc.latitude, myLoc.longitude, place.lat, place.lon)
+                    } else {
+                        Toast.makeText(this, "Đang xác định vị trí, vui lòng chờ...", Toast.LENGTH_SHORT).show()
+                        myLocationOverlay?.runOnFirstFix {
+                            runOnUiThread {
+                                myLocationOverlay?.myLocation?.let { loc ->
+                                    calculateDetailedRoute(loc.latitude, loc.longitude, place.lat, place.lon)
+                                }
+                            }
                         }
                     }
                 }
-            }
+                .setNegativeButton("Hủy", null)
+                .show()
         } ?: Toast.makeText(this, "Chưa chọn địa điểm đích", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun updateMapCameraForNavigation(lat: Double, lon: Double, bearing: Float = 0f) {
+        // Zoom theo vị trí người dùng khi đang navigation
+        map.controller.animateTo(GeoPoint(lat, lon))
+        map.controller.setZoom(18.0)
+        // Xoay bản đồ theo hướng đi
+        map.mapOrientation = -bearing
     }
 
     // Tính route chi tiết với các bước chỉ đường
@@ -672,6 +716,12 @@ class MainActivity : AppCompatActivity() {
                                 dismissLoadingDialog()
                                 directionSteps.clear()
                                 directionSteps.addAll(stepsList)
+
+                                // Vẽ route lên bản đồ
+                                drawRoute(geometry)
+
+
+                                startRealTimeNavigation(stepsList)
                             }
                         }
                     } else {
@@ -1029,7 +1079,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Cuối cùng: Mở BottomSheet nếu nó đang ẩn
+        // Reset nút về trạng thái ban đầu mỗi khi chọn trạm mới
+        btnDirectionsBottom.visibility = View.VISIBLE
+        btnDetailedDirections.visibility = View.GONE
         bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
     }
 
@@ -1911,16 +1963,17 @@ class MainActivity : AppCompatActivity() {
 
         btnDirectionsBottom.setOnClickListener {
             currentPlace?.let {
-                // Ẩn nút cũ, hiện nút chi tiết
+                // Vẽ route đơn giản lên bản đồ
+                showDirections()
+                // Ẩn nút này, hiện nút chi tiết
                 btnDirectionsBottom.visibility = View.GONE
                 btnDetailedDirections.visibility = View.VISIBLE
-
-                showDirections()
-                bottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
+                bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
             } ?: Toast.makeText(this, "Chưa chọn địa điểm đích", Toast.LENGTH_SHORT).show()
         }
 
         btnDetailedDirections.setOnClickListener {
+            // Mở chỉ đường chi tiết với giọng nói
             showDetailedDirections()
         }
 
@@ -1953,7 +2006,7 @@ class MainActivity : AppCompatActivity() {
         map.invalidate()
         currentPlace = null
 
-        // Reset lại nút chỉ đường
+        // Reset 2 nút về trạng thái ban đầu
         btnDirectionsBottom.visibility = View.VISIBLE
         btnDetailedDirections.visibility = View.GONE
     }
@@ -2212,32 +2265,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /*private fun showDirections() {
-        currentPlace?.let { place ->
-            val myLoc = myLocationOverlay?.myLocation
-            if (myLoc != null) {
-                calculateRoute(myLoc.latitude, myLoc.longitude, place.lat, place.lon)
-            } else {
-                // Chờ GPS lock rồi mới chỉ đường
-                Toast.makeText(this, "Đang xác định vị trí, vui lòng chờ...", Toast.LENGTH_SHORT).show()
-                myLocationOverlay?.runOnFirstFix {
-                    runOnUiThread {
-                        myLocationOverlay?.myLocation?.let { loc ->
-                            calculateRoute(loc.latitude, loc.longitude, place.lat, place.lon)
-                        }
-                    }
-                }
-            }
-        } ?: Toast.makeText(this, "Chưa chọn địa điểm đích", Toast.LENGTH_SHORT).show()
-    }*/
+
 
     private fun startRealTimeNavigation(steps: List<DirectionStep>) {
         if (steps.isEmpty()) return
         isNavigating = true
         navHud.visibility = View.VISIBLE
         navArrivalBanner.visibility = View.GONE
-        navHud.getChildAt(0)?.visibility = View.VISIBLE
-        navHud.getChildAt(1)?.visibility = View.VISIBLE
 
         updateHudStep(0, steps[0], 0.0)
         tvNavTotalDistance.text = calculateTotalDistance(steps)
@@ -2269,9 +2303,44 @@ class MainActivity : AppCompatActivity() {
             }
         )
         navigationManager?.start()
-        startHighFrequencyGPS()
+
+        // ✅ Dùng fusedLocationClient thay vì GPS system
+        startFusedLocationForNavigation()
     }
 
+    @SuppressLint("MissingPermission")
+    private fun startFusedLocationForNavigation() {
+        val locationRequest = LocationRequest.create().apply {
+            interval = 2000
+            fastestInterval = 1000
+            priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+        }
+
+        locationCallback = object : LocationCallback() {
+            override fun onLocationResult(locationResult: LocationResult) {
+                locationResult.lastLocation?.let { location ->
+                    if (isNavigating) {
+                        navigationManager?.updateLocation(location.latitude, location.longitude)
+                        // ✅ Thêm dòng này để camera theo vị trí + hướng đi
+                        updateMapCameraForNavigation(
+                            location.latitude,
+                            location.longitude,
+                            location.bearing  // bearing là góc hướng đi từ GPS
+                        )
+                    }
+                    if (isNavigationActive) {
+                        navigationEngine?.updateLocation(location)
+                    }
+                }
+            }
+        }
+
+        fusedLocationClient?.requestLocationUpdates(
+            locationRequest,
+            locationCallback!!,
+            Looper.getMainLooper()
+        )
+    }
     private fun updateHudStep(stepIndex: Int, step: DirectionStep, distanceToTurn: Double) {
         tvNavManeuverIcon.text = step.maneuverIcon()
         tvNavInstruction.text  = step.instruction
@@ -2299,7 +2368,7 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, "Bạn đã đến trạm sạc!", Toast.LENGTH_LONG).show()
     }
 
-    private fun stopNavigation() {
+    /*private fun stopNavigation() {
     // Dừng NavigationManager cũ (navHud)
         isNavigating = false
         navigationManager?.stop()
@@ -2317,17 +2386,28 @@ class MainActivity : AppCompatActivity() {
         if (::navPanel.isInitialized) navPanel.visibility = View.GONE
 
         Toast.makeText(this, "Đã dừng chỉ đường", Toast.LENGTH_SHORT).show()
+    }*/
+
+    private fun stopNavigation() {
+        isNavigating = false
+        navigationManager?.stop()
+        navigationManager = null
+        navHud.visibility = View.GONE
+        navArrivalBanner.visibility = View.GONE
+
+        // ✅ Reset bản đồ về hướng Bắc, zoom ra xa hơn
+        map.mapOrientation = 0f
+        map.controller.setZoom(15.0)
+
+        isNavigationActive = false
+        navigationEngine?.stopNavigation()
+        locationCallback?.let { fusedLocationClient?.removeLocationUpdates(it) }
+        locationCallback = null
+        if (::navPanel.isInitialized) navPanel.visibility = View.GONE
+
+        Toast.makeText(this, "Đã dừng chỉ đường", Toast.LENGTH_SHORT).show()
     }
 
-    private fun startHighFrequencyGPS() {
-        try {
-            val lm = getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
-            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
-                == PackageManager.PERMISSION_GRANTED) {
-                lm.requestLocationUpdates(android.location.LocationManager.GPS_PROVIDER, 2000L, 5f, locationListener)
-            }
-        } catch (e: Exception) {}
-    }
 
     private fun stopHighFrequencyGPS() {
         try {

@@ -48,6 +48,7 @@ class NavigationManager(
         isNavigating = true
         currentStepIndex = 0
         lastAnnouncedStep = -1
+        lastAnnouncedDistance = Double.MAX_VALUE
 
         // Khởi tạo Text-to-Speech tiếng Việt
         tts = TextToSpeech(context) { status ->
@@ -127,18 +128,18 @@ class NavigationManager(
         // Tự động chuyển sang bước tiếp theo nếu đã đi qua điểm rẽ
         if (distanceToTurn <= STEP_ADVANCE_THRESHOLD && currentStepIndex < steps.size - 1) {
             currentStepIndex++
-            lastAnnouncedStep = -1 // Reset để thông báo bước mới
-            lastAnnouncedDistance = -1.0
+            lastAnnouncedStep = -1
+            lastAnnouncedDistance = Double.MAX_VALUE  // ✅ Đổi từ -1.0 thành MAX_VALUE
             onStepChanged(currentStepIndex, steps[currentStepIndex], distanceToTurn)
         }
     }
 
     private fun handleTurnAnnouncement(distance: Double, step: DirectionStep, stepIdx: Int) {
+
         // Thông báo khi còn ~200m
         if (distance <= ANNOUNCE_DISTANCE_FAR &&
             distance > ANNOUNCE_DISTANCE_NEAR &&
-            lastAnnouncedStep != stepIdx &&
-            lastAnnouncedDistance > ANNOUNCE_DISTANCE_FAR) {
+            lastAnnouncedStep != stepIdx) {  // ✅ Bỏ điều kiện lastAnnouncedDistance
 
             val distText = if (distance >= 100) "${(distance / 10).toInt() * 10} mét"
             else "${distance.toInt()} mét"
@@ -147,9 +148,9 @@ class NavigationManager(
             lastAnnouncedDistance = distance
         }
 
-        // Thông báo lại khi còn ~50m (nhắc nhở gần rẽ)
+        // Thông báo lại khi còn ~50m
         if (distance <= ANNOUNCE_DISTANCE_NEAR &&
-            lastAnnouncedDistance > ANNOUNCE_DISTANCE_NEAR) {
+            lastAnnouncedDistance > ANNOUNCE_DISTANCE_NEAR) {  // ✅ Giữ điều kiện này
 
             speak(step.instruction)
             lastAnnouncedDistance = distance
