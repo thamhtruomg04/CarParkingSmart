@@ -559,10 +559,90 @@ class MainActivity : AppCompatActivity() {
             )
         }
     }
-
     private fun guilenServerDatCho(slot: ChargingSlot) {
         val sharedPref = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
         val currentUserEmail = sharedPref.getString("user_email", "Guest") ?: "Guest"
+
+        // Kiểm tra selectedHour trước khi gọi API
+        if (selectedHour == -1) {
+            Toast.makeText(this, "Lỗi: Chưa chọn khung giờ!", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        android.util.Log.d("BOOKING", "Đặt ô: ${slot.slot_code}, giờ: $selectedHour, trạm: ${currentPlace?.id}")
+        android.util.Log.d("BOOKING_DEBUG", """
+        selectedHour = $selectedHour
+        currentPlace = $currentPlace
+        stationId = ${currentPlace?.id}
+        slotId = ${slot.id}
+        slotCode = ${slot.slot_code}
+        userEmail = $currentUserEmail
+    """.trimIndent())
+
+    if (selectedHour == -1) {
+        Toast.makeText(this, "Lỗi: Chưa chọn khung giờ!", Toast.LENGTH_LONG).show()
+        return
+    }
+
+    if (currentPlace?.id == null) {
+        Toast.makeText(this, "Lỗi: Không xác định được trạm sạc!", Toast.LENGTH_LONG).show()
+        return
+    }
+        lifecycleScope.launch {
+            try {
+                val targetStationId = currentPlace?.id ?: 1
+
+                val response = RetrofitClient.instance.createBooking(
+                    userId = currentUserEmail,
+                    stationId = targetStationId,
+                    slotId = slot.id,
+                    status = "Quick_Booking",
+                    scheduledHour = selectedHour
+                )
+
+                if (response.isSuccessful) {
+                    val bookingResponse = response.body()
+                    currentBookingId = bookingResponse?.id ?: -1
+                    loadChargingStationsFromDB()
+
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "✅ Đã giữ ô ${slot.slot_code} khung ${selectedHour}:00-${selectedHour+2}:00!",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        bottomSheetBehavior.isHideable = false
+                        bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
+                        showBookingPayment(currentPlace?.name ?: "Trạm sạc")
+                    }
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    android.util.Log.e("API_ERROR", "HTTP ${response.code()}: $errorBody")
+                    runOnUiThread {
+                        // Hiện lỗi cụ thể thay vì chỉ "Không thể đặt chỗ"
+                        val msg = when (response.code()) {
+                            400 -> "Khung giờ này đã có người đặt!"
+                            409 -> "Ô sạc này đã bị đặt trong khung giờ đó!"
+                            else -> "Lỗi server (${response.code()}): $errorBody"
+                        }
+                        Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("API_ERROR", "Lỗi kết nối: ${e.message}")
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "Lỗi kết nối Server: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    /*private fun guilenServerDatCho(slot: ChargingSlot) {
+        val sharedPref = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+        val currentUserEmail = sharedPref.getString("user_email", "Guest") ?: "Guest"
+
+        android.util.Log.d("BOOKING", "currentPlace = $currentPlace")
+        android.util.Log.d("BOOKING", "slot = ${slot.slot_code}, selectedHour = $selectedHour")
 
         lifecycleScope.launch {
             try {
@@ -584,7 +664,7 @@ class MainActivity : AppCompatActivity() {
                     runOnUiThread {
                         Toast.makeText(
                             this@MainActivity,
-                            "✅ Đã giữ ô ${slot.slot_code}! Vui lòng thanh toán trong 10 phút.",
+                            "Đã giữ ô ${slot.slot_code}! Vui lòng thanh toán trong 10 phút.",
                             Toast.LENGTH_LONG
                         ).show()
 
@@ -608,7 +688,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-    }
+    }*/
 
 
 

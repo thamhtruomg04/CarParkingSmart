@@ -10,7 +10,7 @@ import androidx.recyclerview.widget.RecyclerView
 data class ChargingSlot(
     val id: Int,
     val slot_code: String,
-    val is_available: Boolean
+    val is_available: Boolean // Trạng thái vật lý hiện tại (có xe đang đỗ hay không)
 )
 
 class SlotAdapter(
@@ -34,30 +34,37 @@ class SlotAdapter(
         val slot = slots[position]
         holder.tvSlotCode.text = slot.slot_code
 
+        // LOGIC ĐỔI MÀU TẬP TRUNG VÀO TRẠNG THÁI CHỌN
         when {
-            // Ô đang được chọn
+            // 1. Ô ĐANG ĐƯỢC NGƯỜI DÙNG CLICK CHỌN (Màu xanh đậm)
             position == selectedPosition -> {
-                holder.itemView.setBackgroundColor(Color.parseColor("#4CAF50"))
+                holder.itemView.setBackgroundColor(Color.parseColor("#4CAF50")) // Green 500
                 holder.tvSlotCode.setTextColor(Color.WHITE)
                 holder.itemView.alpha = 1f
             }
-            // Tất cả ô đều có thể chọn (vì có nhiều khung giờ)
+
+            // 2. Ô CHƯA ĐƯỢC CHỌN (Màu xanh nhạt)
+            // Lưu ý: Chúng ta để mặc định là xanh nhạt kể cả is_available là false
+            // để người dùng vẫn ấn vào xem được các khung giờ khác còn trống.
             else -> {
-                holder.itemView.setBackgroundColor(Color.parseColor("#E8F5E9"))
-                holder.tvSlotCode.setTextColor(Color.parseColor("#1B5E20"))
+                holder.itemView.setBackgroundColor(Color.parseColor("#E8F5E9")) // Green 50
+                holder.tvSlotCode.setTextColor(Color.parseColor("#1B5E20")) // Green 900
                 holder.itemView.alpha = 1f
             }
         }
 
-        // Tất cả ô đều clickable
+        // Đảm bảo tất cả các ô đều có thể tương tác để xem lịch trình giờ
         holder.itemView.isClickable = true
         holder.itemView.isEnabled = true
 
         holder.itemView.setOnClickListener {
             val oldPosition = selectedPosition
             selectedPosition = holder.bindingAdapterPosition
-            notifyItemChanged(oldPosition)
+
+            // Cập nhật lại UI cho ô cũ và ô mới
+            if (oldPosition != -1) notifyItemChanged(oldPosition)
             notifyItemChanged(selectedPosition)
+
             onSlotSelected(slot)
         }
     }
