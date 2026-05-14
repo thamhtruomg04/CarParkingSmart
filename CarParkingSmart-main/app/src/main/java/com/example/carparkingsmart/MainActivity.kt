@@ -28,22 +28,27 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
-import kotlin.random.Random
+import com.google.android.gms.location.*
 
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
+import com.example.carparkingsmart.navigation.NavigationEngine
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import android.annotation.SuppressLint
+
 
 import androidx.room.Room
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import com.example.carparkingsmart.data.AppDatabase
-import com.example.carparkingsmart.data.entity.ChargingStationEntity
 import com.example.carparkingsmart.api.RetrofitClient
 
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 
-import android.content.res.ColorStateList
+
 import androidx.core.content.ContextCompat
 import com.bumptech.glide.Glide
 import com.example.carparkingsmart.auth.LoginActivity
@@ -240,6 +245,164 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var navigationEngine: NavigationEngine? = null
+    private var fusedLocationClient: FusedLocationProviderClient? = null
+    private var locationCallback: LocationCallback? = null
+    private var isNavigationActive = false
+
+    // UI cho navigation
+    private lateinit var navPanel: LinearLayout
+    private lateinit var tvCurrentInstruction: TextView
+    private lateinit var tvDistanceToTurn: TextView
+    private lateinit var tvRemainingDistance: TextView
+    private lateinit var btnStopNavigation: Button
+    private lateinit var ivManeuverIcon: ImageView
+
+
+    private fun initNavigationPanel() {
+        navPanel = findViewById(R.id.navigation_panel)
+        tvCurrentInstruction = findViewById(R.id.tv_current_instruction)
+        tvDistanceToTurn = findViewById(R.id.tv_distance_to_turn)
+        tvRemainingDistance = findViewById(R.id.tv_remaining_distance)
+        btnStopNavigation = findViewById(R.id.btn_stop_navigation)
+        ivManeuverIcon = findViewById(R.id.iv_maneuver_icon)
+
+        btnStopNavigation.setOnClickListener {
+            stopNavigation()
+        }
+
+        // Ẩn panel ban đầu
+        navPanel.visibility = View.GONE
+    }
+
+    /**
+     * Bắt đầu navigation (Gọi khi user nhấn "Chỉ đường")
+     */
+    private fun startNavigationToDestination() {
+        val destination = currentPlace ?: return
+
+        myLocationOverlay?.myLocation?.let { myLoc ->
+            val from = GeoPoint(myLoc.latitude, myLoc.longitude)
+            val to = GeoPoint(destination.lat, destination.lon)
+
+            lifecycleScope.launch {
+                try {
+                    // Hiện panel navigation
+                    navPanel.visibility = View.VISIBLE
+                    bottomSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
+
+                    // Bắt đầu navigation
+                    navigationEngine?.startNavigation(from, to)
+                    isNavigationActive = true
+
+                    // Bắt đầu theo dõi vị trí
+                    startLocationUpdates()
+
+                    // Vẽ route
+                    calculateRoute(from.latitude, from.longitude, to.latitude, to.longitude)
+
+                } catch (e: Exception) {
+                    Toast.makeText(this@MainActivity, "Lỗi khởi động navigation: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } ?: run {
+            Toast.makeText(this, "Không xác định được vị trí hiện tại", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Bắt đầu cập nhật vị trí liên tục
+     */
+    @SuppressLint("MissingPermission")
+    private fun startLocationUpdates() {
+        val locationRequest = LocationRequest.create().apply {
+            interval = 2000 // 2 giây
+            fastestInterval = 1000 // 1 giây
+            priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+        }
+
+        locationCallback = object : LocationCallback() {
+            override fun onLocationResult(locationResult: LocationResult) {
+                locationResult.lastLocation?.let { location ->
+                    navigationEngine?.updateLocation(location)
+                }
+            }
+        }
+
+        fusedLocationClient?.requestLocationUpdates(
+            locationRequest,
+            locationCallback!!,
+            Looper.getMainLooper()
+        )
+    }
+
+    /**
+     * Cập nhật UI navigation
+     */
+    private fun updateNavigationUI(state: NavigationEngine.NavigationState) {
+        runOnUiThread {
+            state.currentStep?.let { step ->
+                tvCurrentInstruction.text = step.instruction
+                tvDistanceToTurn.text = formatDistance(state.distanceToNextTurn)
+                tvRemainingDistance.text = "Còn lại: ${formatDistance(state.remainingDistance)}"
+
+                // Cập nhật icon rẽ
+                updateManeuverIcon(step.maneuver)
+
+                // Highlight nếu off-route
+                if (state.isOffRoute) {
+                    tvCurrentInstruction.setTextColor(android.graphics.Color.RED)
+                    tvCurrentInstruction.text = "Bạn đã đi lệch hướng! Đang tính toán lại..."
+                    // TODO: Recalculate route
+                } else {
+                    tvCurrentInstruction.setTextColor(android.graphics.Color.parseColor("#1B5E20"))
+                }
+            }
+        }
+    }
+
+    /**
+     * Cập nhật icon chỉ dẫn rẽ
+     */
+    private fun updateManeuverIcon(maneuver: com.example.carparkingsmart.navigation.Maneuver) {
+        val iconRes = when (maneuver.type) {
+            "turn" -> when (maneuver.modifier) {
+                "left" -> R.drawable.ic_turn_left
+                "right" -> R.drawable.ic_turn_right
+                "slight left" -> R.drawable.ic_turn_slight_left
+                "slight right" -> R.drawable.ic_turn_slight_right
+                else -> R.drawable.ic_arrow_up
+            }
+            "arrive" -> R.drawable.ic_flag
+            else -> R.drawable.ic_arrow_up
+        }
+        ivManeuverIcon.setImageResource(iconRes)
+    }
+
+
+    /**
+     * Sửa lại hàm showDirections để gọi navigation
+     */
+    private fun showDirections() {
+        currentPlace?.let { place ->
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Bắt đầu chỉ đường?")
+                .setMessage("Chỉ đường đến ${place.name} với hướng dẫn giọng nói?")
+                .setPositiveButton("Bắt đầu") { _, _ ->
+                    startNavigationToDestination()
+                }
+                .setNegativeButton("Hủy", null)
+                .show()
+        }
+    }
+
+    /*override fun onDestroy() {
+        super.onDestroy()
+        navigationEngine?.cleanup()
+        fusedLocationClient?.removeLocationUpdates(locationCallback!!)
+    }*/
+
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -268,6 +431,11 @@ class MainActivity : AppCompatActivity() {
 
         initNavHud()
         loadChargingStationsFromDB()
+        navigationEngine = NavigationEngine(this) { state ->
+            updateNavigationUI(state)
+        }
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        initNavigationPanel()
         
     }
 
@@ -2044,7 +2212,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showDirections() {
+    /*private fun showDirections() {
         currentPlace?.let { place ->
             val myLoc = myLocationOverlay?.myLocation
             if (myLoc != null) {
@@ -2061,7 +2229,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         } ?: Toast.makeText(this, "Chưa chọn địa điểm đích", Toast.LENGTH_SHORT).show()
-    }
+    }*/
 
     private fun startRealTimeNavigation(steps: List<DirectionStep>) {
         if (steps.isEmpty()) return
@@ -2128,10 +2296,11 @@ class MainActivity : AppCompatActivity() {
         navHud.getChildAt(0)?.visibility = View.GONE
         navHud.getChildAt(1)?.visibility = View.GONE
         Handler(Looper.getMainLooper()).postDelayed({ stopNavigation() }, 4000)
-        Toast.makeText(this, "🎉 Bạn đã đến trạm sạc!", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "Bạn đã đến trạm sạc!", Toast.LENGTH_LONG).show()
     }
 
     private fun stopNavigation() {
+    // Dừng NavigationManager cũ (navHud)
         isNavigating = false
         navigationManager?.stop()
         navigationManager = null
@@ -2140,6 +2309,13 @@ class MainActivity : AppCompatActivity() {
         navHud.getChildAt(0)?.visibility = View.VISIBLE
         navHud.getChildAt(1)?.visibility = View.VISIBLE
         stopHighFrequencyGPS()
+
+        // Dừng NavigationEngine mới (navPanel)
+        isNavigationActive = false
+        navigationEngine?.stopNavigation()
+        locationCallback?.let { fusedLocationClient?.removeLocationUpdates(it) }
+        if (::navPanel.isInitialized) navPanel.visibility = View.GONE
+
         Toast.makeText(this, "Đã dừng chỉ đường", Toast.LENGTH_SHORT).show()
     }
 
@@ -2541,6 +2717,9 @@ class MainActivity : AppCompatActivity() {
         notificationHandler.removeCallbacksAndMessages(null)
         navigationManager?.stop()
         stopHighFrequencyGPS()
+        // Thêm cleanup cho navigationEngine
+        navigationEngine?.cleanup()
+        locationCallback?.let { fusedLocationClient?.removeLocationUpdates(it) }
     }
 
     // --- PHẦN XỬ LÝ ĐĂNG XUẤT (MENU) ---

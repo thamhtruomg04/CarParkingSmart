@@ -53,5 +53,13 @@ dependencies {
     implementation("com.github.bumptech.glide:glide:4.16.0")
     kapt("com.github.bumptech.glide:compiler:4.16.0")
 
+    // Text-to-Speech
+    implementation("com.google.android.gms:play-services-location:21.0.1")
+// OSRM Routing
+    implementation("com.squareup.okhttp3:okhttp:4.11.0")
+// JSON parsing
+    implementation("com.google.code.gson:gson:2.10.1")
+// Permissions
+    implementation("pub.devrel:easypermissions:3.0.0")
 }
 

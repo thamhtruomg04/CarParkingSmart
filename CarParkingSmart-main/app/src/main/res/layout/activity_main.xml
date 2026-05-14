@@ -206,6 +206,92 @@
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 
+    <!-- Navigation Panel - Đặt trước Bottom Sheet -->
+    <LinearLayout
+        android:id="@+id/navigation_panel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:layout_marginTop="140dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/navigation_panel_bg"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:visibility="gone"
+        android:elevation="10dp">
+
+        <!-- Icon + Instruction -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <ImageView
+                android:id="@+id/iv_maneuver_icon"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:src="@drawable/ic_arrow_up"
+                app:tint="#1B5E20" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginStart="16dp">
+
+                <TextView
+                    android:id="@+id/tv_current_instruction"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Đang tải chỉ dẫn..."
+                    android:textSize="18sp"
+                    android:textColor="#1B5E20"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tv_distance_to_turn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="250 m"
+                    android:textSize="32sp"
+                    android:textColor="#4CAF50"
+                    android:textStyle="bold"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Remaining Distance + Stop Button -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="16dp">
+
+            <TextView
+                android:id="@+id/tv_remaining_distance"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="Còn lại: 2.5 km"
+                android:textSize="14sp"
+                android:textColor="#2E7D32" />
+
+            <Button
+                android:id="@+id/btn_stop_navigation"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:text="Dừng"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/btn_stop_navigation_bg"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp" />
+        </LinearLayout>
+    </LinearLayout>
+
     <!-- Bottom Sheet - Thông tin trạm sạc -->
     <LinearLayout
         android:id="@+id/bottom_sheet"
