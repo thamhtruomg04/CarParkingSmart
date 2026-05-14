@@ -99,42 +99,41 @@ class Booking(models.Model):
         is_new = self.pk is None
 
         if is_new:
-            # ==================== KIỂM TRA KHUNG GIỜ ====================
+            # ==================== ƯU TIÊN KIỂM TRA THEO TimeSlot ====================
             if self.time_slot:
                 if not self.time_slot.is_available:
                     raise ValidationError("Khung giờ này đã được đặt bởi người khác!")
                 
-                # Khóa khung giờ
+                # Chỉ khóa khung giờ cụ thể, KHÔNG khóa cả ô
                 self.time_slot.is_available = False
                 self.time_slot.save()
 
-            # ==================== KIỂM TRA Ô SẠC ====================
+            # Nếu không dùng TimeSlot (đặt ngay) thì mới kiểm tra slot
             elif self.slot:
-                # Chỉ cho phép đặt nếu ô chưa có booking "đang hoạt động"
-                active_booking = Booking.objects.filter(
+                # Kiểm tra có booking đang active nào trên ô này không
+                active = Booking.objects.filter(
                     slot=self.slot,
                     status__in=['Quick_Booking', 'Confirmed']
                 ).exclude(pk=self.pk).exists()
 
-                if active_booking:
+                if active:
                     raise ValidationError("Ô sạc này hiện đang có người sử dụng!")
 
                 self.slot.is_available = False
                 self.slot.save()
 
-            # Kiểm tra tổng slot trạm
+            # Giảm slot trạm
             if self.station.available_slots <= 0:
                 raise ValidationError("Trạm sạc hiện đã hết chỗ!")
 
             self.station.available_slots -= 1
             self.station.save()
 
-            # Thiết lập thông tin booking
             self.expiry_time = timezone.now() + timedelta(minutes=10)
             self.qr_code_data = f"PAYMENT_FOR_BOOKING_{self.user_id}_{timezone.now().timestamp()}"
 
         else:
-            # ==================== HỦY HOẶC HOÀN THÀNH ====================
+            # ==================== HỦY / HOÀN THÀNH ====================
             old = Booking.objects.get(pk=self.pk)
             if self.status in ['Cancelled', 'Completed'] and old.status not in ['Cancelled', 'Completed']:
                 if self.slot:
