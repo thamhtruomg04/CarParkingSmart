@@ -192,24 +192,13 @@ class BookingViewSet(viewsets.ModelViewSet):
     @decorators.action(detail=False, methods=['get'])
     def booked_hours(self, request):
         station_id = request.query_params.get('station_id')
-        slot_id    = request.query_params.get('slot_id')
-
-        if not station_id or not slot_id:
-            return Response({"error": "Thiếu station_id hoặc slot_id"}, status=400)
-
-        # Lấy trực tiếp từ DB — không lọc theo date
+        slot_id = request.query_params.get('slot_id')
+        
         booked = TimeSlot.objects.filter(
             station_id=station_id,
             slot_id=slot_id,
-            is_available=False
+            is_available=False  # Chỉ lấy những khung đã đặt
         ).values_list('start_hour', flat=True)
-
-        # Mỗi booking chiếm 2 tiếng
-        occupied = set()
-        for h in booked:
-            occupied.add(h)
-            if h + 1 <= 23:
-                occupied.add(h + 1)
-
-        return Response(list(occupied))
+        
+        return Response(list(booked))
 
