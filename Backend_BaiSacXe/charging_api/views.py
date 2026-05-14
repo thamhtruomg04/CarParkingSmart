@@ -78,8 +78,7 @@ class BookingViewSet(viewsets.ModelViewSet):
                 }, status=status.HTTP_201_CREATED)
 
         except ValidationError as e:
-            # Bắt lỗi validation từ model
-            error_msg = e.messages[0] if isinstance(e.messages, list) else str(e)
+            error_msg = e.messages[0] if hasattr(e, 'messages') and e.messages else str(e)
             return Response({
                 "error": "Không thể đặt chỗ",
                 "detail": error_msg
