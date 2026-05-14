@@ -36,6 +36,7 @@ class ChargingStationViewSet(viewsets.ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         now = timezone.now()
+        # Tự động hủy booking hết hạn
         expired_bookings = Booking.objects.filter(
             status='Quick_Booking',
             expiry_time__lt=now
@@ -43,7 +44,19 @@ class ChargingStationViewSet(viewsets.ModelViewSet):
         for b in expired_bookings:
             b.status = 'Cancelled'
             b.save() 
-        return super().list(request, *args, **kwargs)
+
+        response = super().list(request, *args, **kwargs)
+        
+        # Thêm thông tin thực tế số khung giờ còn trống
+        data = response.data
+        for station in data:
+            free_slots = TimeSlot.objects.filter(
+                station_id=station['id'], 
+                is_available=True
+            ).count()
+            station['real_available_time_slots'] = free_slots
+
+        return response
     def perform_create(self, serializer):
         station = serializer.save()
         # Tự động tạo TimeSlot cho từng ô và từng khung giờ chẵn (0,2,4,...,22)
@@ -58,7 +71,22 @@ class ChargingStationViewSet(viewsets.ModelViewSet):
                     is_available=True
                 ))
         TimeSlot.objects.bulk_create(time_slots, ignore_conflicts=True)
+    def get_available_time_slots_count(self):
+        """Đếm số khung giờ còn trống của toàn trạm"""
+        return TimeSlot.objects.filter(
+            station=self,
+            is_available=True
+        ).count()
 
+    @property
+    def available_charging_spots(self):
+        """Số ô còn ít nhất 1 khung giờ trống"""
+        from django.db.models import Exists, OuterRef
+        slots_with_free_time = ChargingSlot.objects.filter(
+            station=self,
+            timeslot__is_available=True
+        ).distinct().count()
+        return slots_with_free_time
 class BookingViewSet(viewsets.ModelViewSet):
     queryset = Booking.objects.all().order_by('-booking_time')
     serializer_class = BookingSerializer

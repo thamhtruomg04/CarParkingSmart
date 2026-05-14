@@ -99,18 +99,16 @@ class Booking(models.Model):
         is_new = self.pk is None
 
         if is_new:
-            # ==================== ƯU TIÊN KIỂM TRA THEO TimeSlot ====================
+            # ==================== CHỈ KHÓA KHUNG GIỜ, KHÔNG KHÓA CẢ Ô ====================
             if self.time_slot:
                 if not self.time_slot.is_available:
                     raise ValidationError("Khung giờ này đã được đặt bởi người khác!")
                 
-                # Chỉ khóa khung giờ cụ thể, KHÔNG khóa cả ô
                 self.time_slot.is_available = False
                 self.time_slot.save()
 
-            # Nếu không dùng TimeSlot (đặt ngay) thì mới kiểm tra slot
-            elif self.slot:
-                # Kiểm tra có booking đang active nào trên ô này không
+            # Chỉ khóa ô vật lý nếu đặt kiểu "Quick Booking" không chọn giờ
+            elif self.slot and not self.time_slot:
                 active = Booking.objects.filter(
                     slot=self.slot,
                     status__in=['Quick_Booking', 'Confirmed']
@@ -122,26 +120,24 @@ class Booking(models.Model):
                 self.slot.is_available = False
                 self.slot.save()
 
-            # Giảm slot trạm
-            if self.station.available_slots <= 0:
-                raise ValidationError("Trạm sạc hiện đã hết chỗ!")
-
-            self.station.available_slots -= 1
-            self.station.save()
+            # Giảm slot trạm (chỉ giảm khi thật sự chiếm chỗ)
+            if self.station.available_slots > 0:
+                self.station.available_slots -= 1
+                self.station.save()
 
             self.expiry_time = timezone.now() + timedelta(minutes=10)
             self.qr_code_data = f"PAYMENT_FOR_BOOKING_{self.user_id}_{timezone.now().timestamp()}"
 
         else:
-            # ==================== HỦY / HOÀN THÀNH ====================
+            # Hủy hoặc hoàn thành → trả lại chỗ
             old = Booking.objects.get(pk=self.pk)
             if self.status in ['Cancelled', 'Completed'] and old.status not in ['Cancelled', 'Completed']:
-                if self.slot:
-                    self.slot.is_available = True
-                    self.slot.save()
                 if self.time_slot:
                     self.time_slot.is_available = True
                     self.time_slot.save()
+                if self.slot:
+                    self.slot.is_available = True
+                    self.slot.save()
                 self.station.available_slots += 1
                 self.station.save()
 
