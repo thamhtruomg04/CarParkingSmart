@@ -99,39 +99,42 @@ class Booking(models.Model):
         is_new = self.pk is None
 
         if is_new:
-            # Kiểm tra TimeSlot (ưu tiên khung giờ)
+            # ==================== KIỂM TRA KHUNG GIỜ ====================
             if self.time_slot:
                 if not self.time_slot.is_available:
                     raise ValidationError("Khung giờ này đã được đặt bởi người khác!")
                 
+                # Khóa khung giờ
                 self.time_slot.is_available = False
                 self.time_slot.save()
 
-            # Kiểm tra ChargingSlot
+            # ==================== KIỂM TRA Ô SẠC ====================
             elif self.slot:
-                existing = Booking.objects.filter(
+                # Chỉ cho phép đặt nếu ô chưa có booking "đang hoạt động"
+                active_booking = Booking.objects.filter(
                     slot=self.slot,
                     status__in=['Quick_Booking', 'Confirmed']
                 ).exclude(pk=self.pk).exists()
 
-                if existing:
+                if active_booking:
                     raise ValidationError("Ô sạc này hiện đang có người sử dụng!")
 
                 self.slot.is_available = False
                 self.slot.save()
 
-            # Kiểm tra slot trạm
+            # Kiểm tra tổng slot trạm
             if self.station.available_slots <= 0:
                 raise ValidationError("Trạm sạc hiện đã hết chỗ!")
 
             self.station.available_slots -= 1
             self.station.save()
 
+            # Thiết lập thông tin booking
             self.expiry_time = timezone.now() + timedelta(minutes=10)
             self.qr_code_data = f"PAYMENT_FOR_BOOKING_{self.user_id}_{timezone.now().timestamp()}"
 
         else:
-            # Logic cập nhật (hủy/complete) giữ nguyên
+            # ==================== HỦY HOẶC HOÀN THÀNH ====================
             old = Booking.objects.get(pk=self.pk)
             if self.status in ['Cancelled', 'Completed'] and old.status not in ['Cancelled', 'Completed']:
                 if self.slot:
