@@ -161,55 +161,6 @@ class BookingViewSet(viewsets.ModelViewSet):
             "remaining_slots": booking.station.available_slots
         }, status=status.HTTP_200_OK)
 
-    def create(self, request, *args, **kwargs):
-        data = request.data
-        station_id     = data.get('station')
-        slot_id        = data.get('slot')
-        scheduled_hour = data.get('scheduled_hour')
-
-        time_slot_obj = None
-        if station_id and slot_id and scheduled_hour is not None:
-            try:
-                scheduled_hour = int(scheduled_hour)
-
-                # Kiểm tra khung giờ đã bị đặt chưa
-                existing = TimeSlot.objects.filter(
-                    station_id=station_id,
-                    slot_id=slot_id,
-                    start_hour=scheduled_hour,
-                    is_available=False
-                ).first()
-
-                if existing:
-                    return Response(
-                        {"error": "Khung giờ này đã có người đặt!"},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-
-                # Lấy hoặc tạo TimeSlot, đánh dấu không còn trống
-                time_slot_obj, _ = TimeSlot.objects.get_or_create(
-                    station_id=station_id,
-                    slot_id=slot_id,
-                    start_hour=scheduled_hour,
-                    defaults={'is_available': False}
-                )
-                time_slot_obj.is_available = False
-                time_slot_obj.save()
-
-            except (ValueError, TypeError):
-                pass
-
-        response = super().create(request, *args, **kwargs)
-
-        if response.status_code == 201 and time_slot_obj:
-            try:
-                booking = Booking.objects.get(pk=response.data['id'])
-                booking.time_slot = time_slot_obj
-                booking.save(update_fields=['time_slot'])
-            except Exception:
-                pass
-
-        return response
 
     @decorators.action(detail=False, methods=['get'])
     def booked_hours(self, request):
