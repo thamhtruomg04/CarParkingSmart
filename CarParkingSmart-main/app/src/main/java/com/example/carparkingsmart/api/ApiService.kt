@@ -71,4 +71,29 @@ interface ApiService {
         val booking_time: String,
         val expiry_time: String? = null
     )
+
+    // THÊM method mới này
+    @POST("api/bookings/create_booking_with_slot/")
+    suspend fun createBookingWithSlot(
+        @Body request: CreateBookingRequest
+    ): Response<BookingResponse>
+
+    data class CreateBookingRequest(
+        val user_id: String,
+        val station: Int,
+        val slot: Int,
+        val scheduled_hour: Int,
+        val status: String = "Quick_Booking"
+    )
+    data class StationResponse(
+        val id: Int,
+        val name: String,
+        val ward: String?,
+        val latitude: Double,
+        val longitude: Double,
+        val total_slots: Int?,
+        val available_slots: Int?,
+        val address: String?,
+        val real_available_time_slots: Int? = 0  // ← THÊM DÒNG NÀY
+    )
 }

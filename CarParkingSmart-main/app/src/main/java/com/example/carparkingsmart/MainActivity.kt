@@ -59,6 +59,7 @@ import android.view.View
 import android.widget.Button
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.example.carparkingsmart.api.ApiService
 import com.google.android.material.bottomsheet.BottomSheetDialog
 
 
@@ -185,7 +186,8 @@ class MainActivity : AppCompatActivity() {
         var isNearest: Boolean = false,
         val hasChargingStation: Boolean = false,
         val totalChargingSpots: Int = 0,
-        var availableChargingSpots: Int = 0
+        var availableChargingSpots: Int = 0,
+        var realAvailableTimeSlots: Int = 0 
     )
     
     data class ChargingRequest(
@@ -525,13 +527,17 @@ class MainActivity : AppCompatActivity() {
         btnConfirm.setOnClickListener {
             selectedSlot?.let { slot ->
                 currentSelectedSlotId = slot.id
+                currentSelectedSlotCode = slot.slot_code
                 dialog.dismiss()
-                // Dùng Handler để đợi dialog đóng hẳn rồi mới mở dialog giờ
+                
+                selectedHour = -1  // ← THÊM DÒNG NÀY: reset giờ khi chọn ô mới
+                selectedBookingTimeMillis = 0L  // ← reset luôn
+                
                 Handler(Looper.getMainLooper()).postDelayed({
                     showTimeSlotDialog(slot)
                 }, 200)
             }
-        }
+    }
 
         dialog.show()
     }
@@ -592,12 +598,14 @@ class MainActivity : AppCompatActivity() {
             try {
                 val targetStationId = currentPlace?.id ?: 1
 
-                val response = RetrofitClient.instance.createBooking(
-                    userId = currentUserEmail,
-                    stationId = targetStationId,
-                    slotId = slot.id,
-                    status = "Quick_Booking",
-                    scheduledHour = selectedHour
+                val response = RetrofitClient.instance.createBookingWithSlot(
+                    ApiService.CreateBookingRequest(
+                        user_id = currentUserEmail,
+                        station = targetStationId,
+                        slot = slot.id,
+                        scheduled_hour = selectedHour,
+                        status = "Quick_Booking"
+                    )
                 )
 
                 if (response.isSuccessful) {
@@ -1014,8 +1022,8 @@ class MainActivity : AppCompatActivity() {
                         title = parking.name
 
                         val chargingInfo = if (parking.hasChargingStation) {
-                            if (parking.availableChargingSpots <= 0) "⚡ Hết chỗ sạc"
-                            else "⚡ Trạm sạc: ${parking.availableChargingSpots}/${parking.totalChargingSpots}"
+                            if (parking.realAvailableTimeSlots <= 0) "⚡ Hết khung giờ trống"
+                            else "⚡ Còn ${parking.realAvailableTimeSlots} khung giờ trống"
                         } else {
                             "🅿 Bãi đỗ xe"
                         }
@@ -1078,19 +1086,15 @@ class MainActivity : AppCompatActivity() {
 
         // 2. Cập nhật trạng thái chỗ sạc/đỗ và Live Occupancy
         if (parking.hasChargingStation) {
-            val peopleCharging = parking.totalChargingSpots - parking.availableChargingSpots
-            tvPlaceRating.text = "⚡ Còn ${parking.availableChargingSpots}/${parking.totalChargingSpots} chỗ sạc"
+            // Tính số khung giờ đã được đặt
+            val bookedTimeSlots = parking.totalChargingSpots * 12 - parking.realAvailableTimeSlots
+            tvPlaceRating.text = "⚡ Còn ${parking.realAvailableTimeSlots}/${parking.totalChargingSpots * 12} khung giờ trống"
             tvPlaceRating.setTextColor(android.graphics.Color.parseColor("#4CAF50"))
             tvPlaceCategory.text = "Trạm sạc xe điện"
 
-            // Hiển thị số người đang sạc
+            // Hiển thị số khung giờ đã đặt
             (tvLiveOccupancy.parent as? View)?.visibility = View.VISIBLE
-            tvLiveOccupancy.text = "🔥 Đang có $peopleCharging người sạc tại đây"
-        } else {
-            tvPlaceRating.text = "🅿 Còn ${parking.availableSpots}/${parking.totalSpots} chỗ"
-            tvPlaceRating.setTextColor(android.graphics.Color.parseColor("#757575"))
-            tvPlaceCategory.text = "Bãi đỗ xe thường"
-            (tvLiveOccupancy.parent as? View)?.visibility = View.GONE
+            tvLiveOccupancy.text = "Đã đặt $bookedTimeSlots/${parking.totalChargingSpots * 12} khung giờ"
         }
 
         // 3. XỬ LÝ KHOẢNG CÁCH (PHẦN QUAN TRỌNG NHẤT)
@@ -1110,7 +1114,7 @@ class MainActivity : AppCompatActivity() {
         // 4. XỬ LÝ CÁC NÚT ĐẶT CHỖ
         val btnBookNow = findViewById<Button>(R.id.btn_book_parking)
         btnBookNow.setOnClickListener {
-            if (parking.availableChargingSpots <= 0) {
+            if (parking.realAvailableTimeSlots <= 0) {
                 Toast.makeText(this, "Rất tiếc, trạm này hiện đã hết chỗ sạc!", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
@@ -1184,14 +1188,14 @@ class MainActivity : AppCompatActivity() {
             .create()
 
         lifecycleScope.launch {
-            // Lấy giờ đã bị đặt từ database thực tế
             val bookedHours = fetchBookedHours(currentPlace?.id ?: 1, slot.id)
-
-            // Tạo 12 khung giờ chẵn: 00:00-02:00, 02:00-04:00, ..., 22:00-24:00
+            
+            // Tạo 12 khung giờ chẵn
             val timeSlots = (0..22 step 2).map { h ->
-                val isBooked = h in bookedHours || (h + 1) in bookedHours
+                // CHỈ CẦN KIỂM TRA h (start_hour)
+                val isBooked = h in bookedHours  // ← SỬA: bỏ kiểm tra h+1
                 TimeSlot(
-                    hour  = h,
+                    hour = h,
                     label = String.format("%02d:00 – %02d:00", h, h + 2),
                     isBooked = isBooked
                 )
@@ -1331,7 +1335,7 @@ class MainActivity : AppCompatActivity() {
                 TimeSlot(
                     hour     = h,
                     label    = String.format("%02d:00 – %02d:00", h, h + 2),
-                    isBooked = h in bookedHours || (h + 1) in bookedHours
+                    isBooked = h in bookedHours  // ← ĐÃ SỬA: bỏ kiểm tra h+1
                 )
             }
             runOnUiThread {
@@ -1350,7 +1354,6 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             dialog.dismiss()
-            // Sau khi chọn giờ → hiện hộp thoại xác nhận rồi đặt chỗ
             Handler(Looper.getMainLooper()).postDelayed({
                 confirmQuickBookingWithHour(slot, parking)
             }, 200)
@@ -1399,8 +1402,14 @@ class MainActivity : AppCompatActivity() {
     private suspend fun fetchBookedHours(stationId: Int, slotId: Int): Set<Int> {
         return try {
             val response = RetrofitClient.instance.getBookedHours(stationId, slotId)
-            if (response.isSuccessful) response.body()?.toSet() ?: emptySet()
-            else emptySet()
+            if (response.isSuccessful) {
+                val data = response.body()?.toSet() ?: emptySet()
+                android.util.Log.d("BOOKED_HOURS", "Station $stationId, Slot $slotId: $data")
+                data
+            } else {
+                android.util.Log.e("BOOKED_HOURS", "Error: ${response.code()}")
+                emptySet()
+            }
         } catch (e: Exception) {
             android.util.Log.e("API", "Lỗi lấy giờ bận: ${e.message}")
             emptySet()
@@ -2159,9 +2168,21 @@ class MainActivity : AppCompatActivity() {
                         "✅ Xác nhận thành công! Chỗ sạc đã được giữ.",
                         Toast.LENGTH_LONG
                     ).show()
+                    
+                    // THÊM: Cập nhật lại realAvailableTimeSlots cho trạm hiện tại
+                    currentPlace?.let { place ->
+                        val updatedStation = parkingLots.find { it.id == place.id }
+                        updatedStation?.let { updated ->
+                            // Giảm realAvailableTimeSlots đi 1
+                            updated.realAvailableTimeSlots -= 1
+                            // Cập nhật lại UI
+                            showParkingDetails(updated)
+                        }
+                    }
+                    
                     showAndSaveInvoice(
                         bookingId    = currentBookingId,
-                        slotCode     = currentSelectedSlotCode,   // xem bước 3
+                        slotCode     = currentSelectedSlotCode,
                         stationName  = currentPlace?.name ?: "Trạm sạc",
                         scheduledHour = selectedHour
                     )
@@ -2178,7 +2199,7 @@ class MainActivity : AppCompatActivity() {
                 currentBookingId = -1
                 tvPlaceRating.setTextColor(Color.parseColor("#4CAF50"))
                 bottomSheetBehavior.isHideable = true
-                loadChargingStationsFromDB()
+                loadChargingStationsFromDB()  // Load lại toàn bộ để đồng bộ
             }
         } catch (e: Exception) {
             runOnUiThread {
@@ -2261,8 +2282,8 @@ class MainActivity : AppCompatActivity() {
 
     // ✅ Gọi confirm_payment/ để trừ slot, sau đó cập nhật UI
     private fun subtractSlotFromServer(
-        bookingId: Int,
-        dialog: androidx.appcompat.app.AlertDialog
+    bookingId: Int,
+    dialog: androidx.appcompat.app.AlertDialog
     ) {
         lifecycleScope.launch {
             try {
@@ -2279,6 +2300,15 @@ class MainActivity : AppCompatActivity() {
                             Toast.LENGTH_LONG
                         ).show()
 
+                        // THÊM: Cập nhật realAvailableTimeSlots
+                        currentPlace?.let { place ->
+                            val updatedStation = parkingLots.find { it.id == place.id }
+                            updatedStation?.let { updated ->
+                                updated.realAvailableTimeSlots -= 1
+                                showParkingDetails(updated)
+                            }
+                        }
+
                         showAndSaveInvoice(
                             bookingId     = bookingId,
                             slotCode      = currentSelectedSlotCode,
@@ -2293,7 +2323,6 @@ class MainActivity : AppCompatActivity() {
                         ).show()
                     }
 
-                    // Reset trạng thái UI
                     currentBookingId = -1
                     tvPlaceRating.setTextColor(Color.parseColor("#4CAF50"))
                     bottomSheetBehavior.isHideable = true
@@ -2830,7 +2859,8 @@ class MainActivity : AppCompatActivity() {
                         address = station.address ?: "",
                         hasChargingStation = true,
                         totalChargingSpots = station.total_slots ?: 0,
-                        availableChargingSpots = station.available_slots ?: 0
+                        availableChargingSpots = station.available_slots ?: 0,
+                        realAvailableTimeSlots = station.real_available_time_slots ?: 0
                     ))
                 }
 
