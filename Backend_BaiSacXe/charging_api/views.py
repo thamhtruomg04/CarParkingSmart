@@ -224,6 +224,11 @@ class BookingViewSet(viewsets.ModelViewSet):
             if not time_slot.is_available:
                 return Response({"error": "Khung giờ này đã được đặt"}, status=400)
             
+            # THÊM: Giảm available_slots của trạm
+            if station.available_slots > 0:
+                station.available_slots -= 1
+                station.save()
+            
             booking = Booking.objects.create(
                 user_id=user_id,
                 station=station,
