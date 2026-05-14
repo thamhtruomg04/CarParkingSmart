@@ -99,59 +99,54 @@ class Booking(models.Model):
         is_new = self.pk is None
 
         if is_new:
-            # 1. Nếu đặt theo khung giờ (TimeSlot)
+            # ==================== KIỂM TRA ĐẶT CHỖ ====================
             if self.time_slot:
                 if not self.time_slot.is_available:
-                    raise ValidationError("Khung giờ này đã được đặt!")
+                    raise ValidationError("Khung giờ này đã được đặt bởi người khác!")
                 
-                # Khóa khung giờ đó lại
                 self.time_slot.is_available = False
                 self.time_slot.save()
-                
-        
+
             elif self.slot:
-        # Kiểm tra xem có booking Quick_Booking nào đang giữ slot này không
+                # Kiểm tra slot đang được giữ bởi Quick_Booking nào không
                 existing = Booking.objects.filter(
                     slot=self.slot,
-                    status='Quick_Booking'
-                ).first()
-                
+                    status__in=['Quick_Booking', 'Confirmed']
+                ).exclude(pk=self.pk).first()
+
                 if existing:
-                    # Tự động hủy booking cũ chưa thanh toán để nhường chỗ
-                    existing.status = 'Cancelled'
-                    existing.save()  # Sẽ trigger restore slot trong save()
-            
-                # Sau khi hủy xong, kiểm tra lại
-                self.slot.refresh_from_db()
-                if not self.slot.is_available:
                     raise ValidationError("Ô sạc này hiện đang có người sử dụng!")
-                
+
                 self.slot.is_available = False
                 self.slot.save()
 
-            # Giảm số chỗ trống chung của trạm
+            # Kiểm tra chỗ trống của trạm
             if self.station.available_slots <= 0:
-                raise ValidationError("Trạm sạc đã hết chỗ trống!")
+                raise ValidationError("Trạm sạc hiện đã hết chỗ!")
+
             self.station.available_slots -= 1
             self.station.save()
 
+            # Thiết lập thời gian hết hạn
             self.expiry_time = timezone.now() + timedelta(minutes=10)
             self.qr_code_data = f"PAYMENT_FOR_BOOKING_{self.user_id}_{timezone.now().timestamp()}"
 
         else:
-            # Xử lý khi CẬP NHẬT (Hủy hoặc Hoàn thành)
-            old_booking = Booking.objects.get(pk=self.pk)
-            if self.status in ['Cancelled', 'Completed'] and old_booking.status not in ['Cancelled', 'Completed']:
-                # Trả lại ô sạc vật lý
+            # ==================== CẬP NHẬT (Hủy / Hoàn thành) ====================
+            old = Booking.objects.get(pk=self.pk)
+            
+            if self.status in ['Cancelled', 'Completed'] and old.status not in ['Cancelled', 'Completed']:
+                # Trả slot
                 if self.slot:
                     self.slot.is_available = True
                     self.slot.save()
                 
-                # Trả lại khung giờ
+                # Trả time_slot
                 if self.time_slot:
                     self.time_slot.is_available = True
                     self.time_slot.save()
                 
+                # Tăng lại slot trạm
                 self.station.available_slots += 1
                 self.station.save()
 

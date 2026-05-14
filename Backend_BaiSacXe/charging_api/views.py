@@ -2,6 +2,7 @@ from rest_framework import viewsets, generics, status, decorators
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from .models import ChargingStation, Booking, ChargingSlot, TimeSlot
 from .serializers import ChargingStationSerializer, BookingSerializer, UserSerializer, ChargingSlotSerializer
 
@@ -63,7 +64,34 @@ class BookingViewSet(viewsets.ModelViewSet):
     serializer_class = BookingSerializer
 
     def create(self, request, *args, **kwargs):
-        return super().create(request, *args, **kwargs)
+        try:
+            serializer = self.get_serializer(data=request.data)
+            
+            if serializer.is_valid(raise_exception=True):
+                booking = serializer.save()
+                
+                return Response({
+                    "id": booking.id,
+                    "message": "Đặt chỗ thành công!",
+                    "slot_code": booking.slot.slot_code if booking.slot else None,
+                    "scheduled_hour": booking.scheduled_hour
+                }, status=status.HTTP_201_CREATED)
+
+        except ValidationError as e:
+            # Bắt lỗi validation từ model
+            error_msg = e.messages[0] if isinstance(e.messages, list) else str(e)
+            return Response({
+                "error": "Không thể đặt chỗ",
+                "detail": error_msg
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({
+                "error": "Lỗi server",
+                "detail": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @decorators.action(detail=False, methods=['post'])
     def check_in(self, request):
