@@ -201,4 +201,45 @@ class BookingViewSet(viewsets.ModelViewSet):
         ).values_list('start_hour', flat=True)
         
         return Response(list(booked))
+    @decorators.action(detail=False, methods=['post'])
+    def create_booking_with_slot(self, request):
+        """Tạo booking với time_slot cụ thể"""
+        user_id = request.data.get('user_id')
+        station_id = request.data.get('station')
+        slot_id = request.data.get('slot')
+        scheduled_hour = request.data.get('scheduled_hour')
+        
+        if not all([user_id, station_id, slot_id, scheduled_hour]):
+            return Response({"error": "Thiếu thông tin"}, status=400)
+        
+        try:
+            station = ChargingStation.objects.get(id=station_id)
+            slot = ChargingSlot.objects.get(id=slot_id)
+            time_slot = TimeSlot.objects.get(
+                station=station,
+                slot=slot,
+                start_hour=scheduled_hour
+            )
+            
+            if not time_slot.is_available:
+                return Response({"error": "Khung giờ này đã được đặt"}, status=400)
+            
+            booking = Booking.objects.create(
+                user_id=user_id,
+                station=station,
+                slot=slot,
+                time_slot=time_slot,
+                scheduled_hour=scheduled_hour,
+                status='Quick_Booking'
+            )
+            
+            return Response({
+                "id": booking.id,
+                "message": "Đặt chỗ thành công"
+            }, status=201)
+            
+        except TimeSlot.DoesNotExist:
+            return Response({"error": "Khung giờ không tồn tại"}, status=400)
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
 
