@@ -98,48 +98,32 @@ class Booking(models.Model):
     def save(self, *args, **kwargs):
         is_new = self.pk is None
 
-        if is_new:
-            # ==================== CHỈ KHÓA KHUNG GIỜ, KHÔNG KHÓA CẢ Ô ====================
+        if is_new:  # Booking mới
             if self.time_slot:
+                # Kiểm tra lại lần cuối trước khi lưu
                 if not self.time_slot.is_available:
                     raise ValidationError("Khung giờ này đã được đặt bởi người khác!")
-                
+
+                # Lock khung giờ
                 self.time_slot.is_available = False
                 self.time_slot.save()
 
-            # Chỉ khóa ô vật lý nếu đặt kiểu "Quick Booking" không chọn giờ
-            elif self.slot and not self.time_slot:
-                active = Booking.objects.filter(
-                    slot=self.slot,
-                    status__in=['Quick_Booking', 'Confirmed']
-                ).exclude(pk=self.pk).exists()
-
-                if active:
+            # Quick Booking đặc biệt (nếu không dùng time_slot)
+            elif self.status == 'Quick_Booking' and self.slot:
+                if not self.slot.is_available:
                     raise ValidationError("Ô sạc này hiện đang có người sử dụng!")
-
                 self.slot.is_available = False
                 self.slot.save()
 
-            # Giảm slot trạm (chỉ giảm khi thật sự chiếm chỗ)
-            if self.station.available_slots > 0:
-                self.station.available_slots -= 1
-                self.station.save()
+            # Set thời gian hết hạn
+            if not self.expiry_time:
+                self.expiry_time = timezone.now() + timedelta(minutes=10)
 
-            self.expiry_time = timezone.now() + timedelta(minutes=10)
-            self.qr_code_data = f"PAYMENT_FOR_BOOKING_{self.user_id}_{timezone.now().timestamp()}"
-
-        else:
-            # Hủy hoặc hoàn thành → trả lại chỗ
-            old = Booking.objects.get(pk=self.pk)
-            if self.status in ['Cancelled', 'Completed'] and old.status not in ['Cancelled', 'Completed']:
-                if self.time_slot:
-                    self.time_slot.is_available = True
-                    self.time_slot.save()
-                if self.slot:
-                    self.slot.is_available = True
-                    self.slot.save()
-                self.station.available_slots += 1
-                self.station.save()
+        else:  # Update booking cũ (cancel, complete...)
+            # Trả slot nếu hủy hoặc hoàn thành
+            if self.status in ['Cancelled', 'Completed'] and self.time_slot:
+                self.time_slot.is_available = True
+                self.time_slot.save()
 
         super().save(*args, **kwargs)
 
