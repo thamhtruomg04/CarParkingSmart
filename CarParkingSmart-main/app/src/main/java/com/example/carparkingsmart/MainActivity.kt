@@ -1264,7 +1264,8 @@ class MainActivity : AppCompatActivity() {
                             stationId     = parking.id,
                             slotId        = slot.id,
                             status        = "Quick_Booking",
-                            scheduledHour = selectedHour
+                            //scheduledHour = selectedHour,
+                            scheduledHour = -1
                         )
 
                         if (response.isSuccessful) {
@@ -1403,15 +1404,15 @@ class MainActivity : AppCompatActivity() {
         return try {
             val response = RetrofitClient.instance.getBookedHours(stationId, slotId)
             if (response.isSuccessful) {
-                val data = response.body()?.toSet() ?: emptySet()
-                android.util.Log.d("BOOKED_HOURS", "Station $stationId, Slot $slotId: $data")
-                data
+                val data = response.body() ?: emptyList()
+                android.util.Log.d("BOOKED_HOURS", "Station=$stationId, Slot=$slotId → Booked: $data")
+                data.toSet()
             } else {
-                android.util.Log.e("BOOKED_HOURS", "Error: ${response.code()}")
+                android.util.Log.e("BOOKED_HOURS", "HTTP ${response.code()}")
                 emptySet()
             }
         } catch (e: Exception) {
-            android.util.Log.e("API", "Lỗi lấy giờ bận: ${e.message}")
+            android.util.Log.e("BOOKED_HOURS", "Exception: ${e.message}")
             emptySet()
         }
     }
