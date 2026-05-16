@@ -207,17 +207,19 @@ class BookingViewSet(viewsets.ModelViewSet):
     @decorators.action(detail=False, methods=['get'])
     def booked_hours(self, request):
         station_id = request.query_params.get('station_id')
-        slot_id = request.query_params.get('slot_id')
-        
-        booked = Booking.objects.filter(
+        slot_id    = request.query_params.get('slot_id')
+
+        if not station_id or not slot_id:
+            return Response({"error": "Thiếu tham số"}, status=400)
+
+        booked = TimeSlot.objects.filter(
             station_id=station_id,
             slot_id=slot_id,
-            status__in=['Quick_Booking', 'Confirmed'],
-            scheduled_hour__isnull=False,
-            scheduled_hour__gte=0       # ← loại bỏ scheduled_hour=-1
-        ).values_list('scheduled_hour', flat=True).distinct()
-        
+            is_available=False
+        ).values_list('start_hour', flat=True)
+
         return Response(list(booked))
+    
     @decorators.action(detail=False, methods=['post'])
     def create_booking_with_slot(self, request):
         print("RAW DATA:", request.data)          # ← thêm dòng này
