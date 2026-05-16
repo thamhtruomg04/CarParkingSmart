@@ -220,10 +220,13 @@ class BookingViewSet(viewsets.ModelViewSet):
         return Response(list(booked))
     @decorators.action(detail=False, methods=['post'])
     def create_booking_with_slot(self, request):
+        print("RAW DATA:", request.data)          # ← thêm dòng này
+        print("CONTENT TYPE:", request.content_type)
         user_id = request.data.get('user_id')
         station_id = request.data.get('station')
         slot_id = request.data.get('slot')
         scheduled_hour = request.data.get('scheduled_hour')
+        print(f"Parsed: user_id={user_id}, station={station_id}, slot={slot_id}, hour={scheduled_hour}")
 
         if any(v is None for v in [user_id, station_id, slot_id, scheduled_hour]):
             return Response({"error": "Thiếu thông tin"}, status=400)
