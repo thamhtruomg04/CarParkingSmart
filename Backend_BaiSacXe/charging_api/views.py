@@ -57,6 +57,21 @@ class ChargingStationViewSet(viewsets.ModelViewSet):
             station['real_available_time_slots'] = free_slots
 
         return response
+    
+
+    # Thêm signal hoặc sửa endpoint cancel để reset TimeSlot
+    @decorators.action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        booking = Booking.objects.get(pk=pk)
+        if booking.status in ['Quick_Booking', 'Confirmed']:
+            booking.status = 'Cancelled'
+            # ✅ Trả lại TimeSlot
+            if booking.time_slot:
+                booking.time_slot.is_available = True
+                booking.time_slot.save()
+            booking.save()
+        return Response({"message": "Đã hủy"})
+    
     def perform_create(self, serializer):
         station = serializer.save()
         # Tự động tạo TimeSlot cho từng ô và từng khung giờ chẵn (0,2,4,...,22)
@@ -194,11 +209,13 @@ class BookingViewSet(viewsets.ModelViewSet):
         station_id = request.query_params.get('station_id')
         slot_id = request.query_params.get('slot_id')
         
-        booked = TimeSlot.objects.filter(
+        booked = Booking.objects.filter(
             station_id=station_id,
             slot_id=slot_id,
-            is_available=False  # Chỉ lấy những khung đã đặt
-        ).values_list('start_hour', flat=True)
+            status__in=['Quick_Booking', 'Confirmed'],
+            scheduled_hour__isnull=False,
+            scheduled_hour__gte=0       # ← loại bỏ scheduled_hour=-1
+        ).values_list('scheduled_hour', flat=True).distinct()
         
         return Response(list(booked))
     @decorators.action(detail=False, methods=['post'])
