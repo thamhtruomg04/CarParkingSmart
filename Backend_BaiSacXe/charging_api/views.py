@@ -220,15 +220,22 @@ class BookingViewSet(viewsets.ModelViewSet):
         return Response(list(booked))
     @decorators.action(detail=False, methods=['post'])
     def create_booking_with_slot(self, request):
-        """Tạo booking với time_slot cụ thể"""
         user_id = request.data.get('user_id')
         station_id = request.data.get('station')
         slot_id = request.data.get('slot')
         scheduled_hour = request.data.get('scheduled_hour')
-        
-        if not all([user_id, station_id, slot_id, scheduled_hour]):
+
+        if any(v is None for v in [user_id, station_id, slot_id, scheduled_hour]):
             return Response({"error": "Thiếu thông tin"}, status=400)
-        
+
+        # Ép kiểu an toàn
+        try:
+            scheduled_hour = int(scheduled_hour)
+            station_id = int(station_id)
+            slot_id = int(slot_id)
+        except (ValueError, TypeError):
+            return Response({"error": "Dữ liệu không hợp lệ"}, status=400)
+
         try:
             station = ChargingStation.objects.get(id=station_id)
             slot = ChargingSlot.objects.get(id=slot_id)
@@ -237,15 +244,13 @@ class BookingViewSet(viewsets.ModelViewSet):
                 slot=slot,
                 start_hour=scheduled_hour
             )
-            
+
             if not time_slot.is_available:
                 return Response({"error": "Khung giờ này đã được đặt"}, status=400)
-            
-            # THÊM: Giảm available_slots của trạm
-            if station.available_slots > 0:
-                station.available_slots -= 1
-                station.save()
-            
+
+            time_slot.is_available = False
+            time_slot.save()
+
             booking = Booking.objects.create(
                 user_id=user_id,
                 station=station,
@@ -254,14 +259,10 @@ class BookingViewSet(viewsets.ModelViewSet):
                 scheduled_hour=scheduled_hour,
                 status='Quick_Booking'
             )
-            
-            return Response({
-                "id": booking.id,
-                "message": "Đặt chỗ thành công"
-            }, status=201)
-            
+
+            return Response({"id": booking.id, "message": "Đặt chỗ thành công"}, status=201)
+
         except TimeSlot.DoesNotExist:
             return Response({"error": "Khung giờ không tồn tại"}, status=400)
         except Exception as e:
             return Response({"error": str(e)}, status=400)
-
