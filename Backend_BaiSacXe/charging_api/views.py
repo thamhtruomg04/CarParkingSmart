@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from rest_framework import viewsets, generics, status, decorators
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -57,6 +59,22 @@ class ChargingStationViewSet(viewsets.ModelViewSet):
             station['real_available_time_slots'] = free_slots
 
         return response
+    @decorators.action(detail=False, methods=['post'])
+    def force_reset_timeslot(self, request):
+        station_id = request.data.get('station_id')
+        slot_id = request.data.get('slot_id')
+        hour = request.data.get('hour')  # Nếu muốn reset 1 giờ cụ thể
+
+        queryset = TimeSlot.objects.filter(station_id=station_id, slot_id=slot_id)
+        if hour is not None:
+            queryset = queryset.filter(start_hour=hour)
+
+        count = queryset.update(is_available=True)
+
+        return Response({
+            "message": f"Đã reset {count} khung giờ thành available=True",
+            "reset_hour": hour
+        })
     
 
     # Thêm signal hoặc sửa endpoint cancel để reset TimeSlot
@@ -222,28 +240,21 @@ class BookingViewSet(viewsets.ModelViewSet):
     
     @decorators.action(detail=False, methods=['post'])
     def create_booking_with_slot(self, request):
-        print("RAW DATA:", request.data)          # ← thêm dòng này
-        print("CONTENT TYPE:", request.content_type)
+        print("RAW DATA:", request.data)
+
         user_id = request.data.get('user_id')
         station_id = request.data.get('station')
         slot_id = request.data.get('slot')
         scheduled_hour = request.data.get('scheduled_hour')
-        print(f"Parsed: user_id={user_id}, station={station_id}, slot={slot_id}, hour={scheduled_hour}")
 
         if any(v is None for v in [user_id, station_id, slot_id, scheduled_hour]):
-            return Response({"error": "Thiếu thông tin"}, status=400)
+            return Response({"error": "Thiếu thông tin bắt buộc"}, status=400)
 
-        # Ép kiểu an toàn
         try:
             scheduled_hour = int(scheduled_hour)
-            station_id = int(station_id)
-            slot_id = int(slot_id)
-        except (ValueError, TypeError):
-            return Response({"error": "Dữ liệu không hợp lệ"}, status=400)
-
-        try:
-            station = ChargingStation.objects.get(id=station_id)
-            slot = ChargingSlot.objects.get(id=slot_id)
+            station = ChargingStation.objects.get(id=int(station_id))
+            slot = ChargingSlot.objects.get(id=int(slot_id))
+            
             time_slot = TimeSlot.objects.get(
                 station=station,
                 slot=slot,
@@ -251,8 +262,9 @@ class BookingViewSet(viewsets.ModelViewSet):
             )
 
             if not time_slot.is_available:
-                return Response({"error": "Khung giờ này đã được đặt"}, status=400)
+                return Response({"error": "Khung giờ này đã được đặt bởi người khác!"}, status=400)
 
+            # Lock khung giờ
             time_slot.is_available = False
             time_slot.save()
 
@@ -262,12 +274,20 @@ class BookingViewSet(viewsets.ModelViewSet):
                 slot=slot,
                 time_slot=time_slot,
                 scheduled_hour=scheduled_hour,
-                status='Quick_Booking'
+                status='Quick_Booking',
+                expiry_time=timezone.now() + timedelta(minutes=10)
             )
 
-            return Response({"id": booking.id, "message": "Đặt chỗ thành công"}, status=201)
+            return Response({
+                "id": booking.id,
+                "message": "Đặt chỗ thành công!",
+                "slot_code": slot.slot_code,
+                "scheduled_hour": scheduled_hour
+            }, status=201)
 
-        except TimeSlot.DoesNotExist:
-            return Response({"error": "Khung giờ không tồn tại"}, status=400)
+        except (TimeSlot.DoesNotExist, ChargingSlot.DoesNotExist, ChargingStation.DoesNotExist):
+            return Response({"error": "Không tìm thấy ô sạc hoặc khung giờ"}, status=400)
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             return Response({"error": str(e)}, status=400)
