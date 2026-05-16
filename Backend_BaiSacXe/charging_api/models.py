@@ -98,37 +98,30 @@ class Booking(models.Model):
     def save(self, *args, **kwargs):
         is_new = self.pk is None
 
-        if is_new:  # Booking mới
+        if is_new:
             if self.time_slot:
-                # Kiểm tra lại lần cuối trước khi lưu
-                if not self.time_slot.is_available:
-                    raise ValidationError("Khung giờ này đã được đặt bởi người khác!")
+                # KHÔNG check lại ở đây nữa vì view đã check + lock rồi
+                # Chỉ lock nếu chưa lock (an toàn)
+                if self.time_slot.is_available:
+                    self.time_slot.is_available = False
+                    self.time_slot.save()
 
-                # Lock khung giờ
-                self.time_slot.is_available = False
-                self.time_slot.save()
-
-            # Quick Booking đặc biệt (nếu không dùng time_slot)
-            elif self.status == 'Quick_Booking' and self.slot:
-                if not self.slot.is_available:
-                    raise ValidationError("Ô sạc này hiện đang có người sử dụng!")
+            # Quick Booking fallback
+            elif self.status == 'Quick_Booking' and self.slot and self.slot.is_available:
                 self.slot.is_available = False
                 self.slot.save()
 
-            # Set thời gian hết hạn
             if not self.expiry_time:
                 self.expiry_time = timezone.now() + timedelta(minutes=10)
 
-        else:  # Update booking cũ (cancel, complete...)
-            # Trả slot nếu hủy hoặc hoàn thành
+        else:  # Update (cancel/complete)
             if self.status in ['Cancelled', 'Completed'] and self.time_slot:
                 self.time_slot.is_available = True
                 self.time_slot.save()
 
         super().save(*args, **kwargs)
-
-    def __str__(self):
-        return f"{self.user_id} - {self.station.name}"
+        def __str__(self):
+            return f"{self.user_id} - {self.station.name}"
 
 
 # Signal xử lý khi xóa booking từ Admin

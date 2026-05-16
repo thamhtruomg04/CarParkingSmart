@@ -248,7 +248,7 @@ class BookingViewSet(viewsets.ModelViewSet):
         scheduled_hour = request.data.get('scheduled_hour')
 
         if any(v is None for v in [user_id, station_id, slot_id, scheduled_hour]):
-            return Response({"error": "Thiếu thông tin bắt buộc"}, status=400)
+            return Response({"error": "Thiếu thông tin"}, status=400)
 
         try:
             scheduled_hour = int(scheduled_hour)
@@ -256,15 +256,13 @@ class BookingViewSet(viewsets.ModelViewSet):
             slot = ChargingSlot.objects.get(id=int(slot_id))
             
             time_slot = TimeSlot.objects.get(
-                station=station,
-                slot=slot,
-                start_hour=scheduled_hour
+                station=station, slot=slot, start_hour=scheduled_hour
             )
 
             if not time_slot.is_available:
                 return Response({"error": "Khung giờ này đã được đặt bởi người khác!"}, status=400)
 
-            # Lock khung giờ
+            # Lock
             time_slot.is_available = False
             time_slot.save()
 
@@ -286,7 +284,7 @@ class BookingViewSet(viewsets.ModelViewSet):
             }, status=201)
 
         except (TimeSlot.DoesNotExist, ChargingSlot.DoesNotExist, ChargingStation.DoesNotExist):
-            return Response({"error": "Không tìm thấy ô sạc hoặc khung giờ"}, status=400)
+            return Response({"error": "Không tìm thấy khung giờ"}, status=400)
         except Exception as e:
             import traceback
             traceback.print_exc()
