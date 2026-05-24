@@ -199,20 +199,38 @@ class BookingViewSet(viewsets.ModelViewSet):
             return Response({"error": "Không tìm thấy booking!"}, 
                         status=status.HTTP_404_NOT_FOUND)
 
-        # Đã confirmed rồi thì không làm gì
         if booking.status == "Confirmed":
             return Response({
                 "message": "Đơn đặt chỗ đã được xác nhận trước đó."
             }, status=status.HTTP_200_OK)
 
-        # Chỉ cho phép xác nhận khi đang ở trạng thái Quick_Booking
         if booking.status != "Quick_Booking":
             return Response({
                 "error": "Chỉ có thể xác nhận thanh toán cho đơn Quick_Booking"
             }, status=status.HTTP_400_BAD_REQUEST)
 
         booking.status = "Confirmed"
-        booking.save() 
+        booking.save()
+
+        # ← THÊM: Đảm bảo TimeSlot bị đánh dấu là đã đặt
+        if booking.time_slot:
+            booking.time_slot.is_available = False
+            booking.time_slot.save()
+        elif booking.slot and booking.scheduled_hour is not None:
+            # Fallback: tìm TimeSlot theo slot + scheduled_hour
+            try:
+                time_slot = TimeSlot.objects.get(
+                    station=booking.station,
+                    slot=booking.slot,
+                    start_hour=booking.scheduled_hour
+                )
+                time_slot.is_available = False
+                time_slot.save()
+                # Gắn lại vào booking để sau này cancel có thể trả lại
+                booking.time_slot = time_slot
+                booking.save(update_fields=['time_slot'])
+            except TimeSlot.DoesNotExist:
+                pass
 
         return Response({
             "message": "Thanh toán thành công! Chỗ sạc đã được giữ.",
