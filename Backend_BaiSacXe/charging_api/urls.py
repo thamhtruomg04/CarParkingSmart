@@ -1,18 +1,20 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework.authtoken.views import obtain_auth_token
-from .views import ChargingStationViewSet, BookingViewSet, RegisterView
+from .views import ChargingStationViewSet, BookingViewSet, RegisterView, user_booking_stats
 
 router = DefaultRouter()
 router.register(r'stations', ChargingStationViewSet)
 router.register(r'bookings', BookingViewSet)
 
 urlpatterns = [
+    path('bookings/stats/', user_booking_stats, name='booking_stats'), 
     path('', include(router.urls)), 
     
     path('register/', RegisterView.as_view(), name='register'),
     
     path('api-token-auth/', obtain_auth_token, name='api_token_auth'),
+
 
     
 ]

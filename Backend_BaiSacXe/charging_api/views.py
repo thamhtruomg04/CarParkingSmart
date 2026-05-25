@@ -22,6 +22,18 @@ class RegisterView(generics.CreateAPIView):
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+@api_view(['GET'])
+def user_booking_stats(request):
+    user_id = request.query_params.get('user_id')
+    if not user_id:
+        return Response({'error': 'user_id required'}, status=400)
+    
+    bookings = Booking.objects.filter(user_id=user_id)
+    return Response({
+        'total': bookings.count(),
+        'completed': bookings.filter(status='Confirmed').count(),
+        'cancelled': bookings.filter(status='Cancelled').count(),
+    })
 class ChargingStationViewSet(viewsets.ModelViewSet):
     queryset = ChargingStation.objects.all()
     serializer_class = ChargingStationSerializer

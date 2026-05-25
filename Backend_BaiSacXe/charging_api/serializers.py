@@ -18,7 +18,14 @@ class ChargingStationSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class BookingSerializer(serializers.ModelSerializer):
-    station_name = serializers.ReadOnlyField(source='station.name')
+    station_name = serializers.SerializerMethodField()
+    slot_code = serializers.SerializerMethodField()
+
+    def get_station_name(self, obj):
+        return obj.station.name if obj.station else None
+
+    def get_slot_code(self, obj):
+        return obj.slot.slot_code if obj.slot else None
 
     class Meta:
         model = Booking
