@@ -10,7 +10,7 @@ data class DirectionStep(
     val endLat: Double = 0.0,
     val endLon: Double = 0.0
 ) {
-    // ✅ Chuyển vào trong class, không để top-level nữa
+    // Chuyển vào trong class, không để top-level nữa
     fun maneuverIcon(): String {
         return when {
             maneuver.contains("depart")       -> "🏁"

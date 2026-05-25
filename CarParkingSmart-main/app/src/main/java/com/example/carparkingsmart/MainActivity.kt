@@ -611,17 +611,24 @@ class MainActivity : AppCompatActivity() {
                 if (response.isSuccessful) {
                     val bookingResponse = response.body()
                     currentBookingId = bookingResponse?.id ?: -1
-                    loadChargingStationsFromDB()
+                    //loadChargingStationsFromDB()
 
                     runOnUiThread {
                         Toast.makeText(
                             this@MainActivity,
-                            "✅ Đã giữ ô ${slot.slot_code} khung ${selectedHour}:00-${selectedHour+2}:00!",
+                            "Đã giữ ô ${slot.slot_code} khung ${selectedHour}:00-${selectedHour+2}:00!",
                             Toast.LENGTH_LONG
                         ).show()
                         bottomSheetBehavior.isHideable = false
                         bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
+                        currentPlace?.let { place ->
+                            parkingLots.find { it.id == place.id }?.let { station ->
+                                station.realAvailableTimeSlots -= 1
+                            }
+                        }
+
                         showBookingPayment(currentPlace?.name ?: "Trạm sạc")
+                        loadChargingStationsFromDB()
                     }
                 } else {
                     val errorBody = response.errorBody()?.string()
@@ -915,10 +922,10 @@ class MainActivity : AppCompatActivity() {
         // Tạo nút thanh toán
         val btnPayNow = Button(this).apply {
             tag = "btn_pay_now"   // ← PHẢI có tag để tìm và xóa sau này
-            text = "💳 Tôi đã đến trạm - Thanh toán"
+            text = "Tôi đã đến trạm - Thanh toán"
             textSize = 14f
             setTextColor(Color.WHITE)
-            setBackgroundColor(Color.parseColor("#1565C0"))
+            setBackgroundColor(Color.parseColor("#6A1B9A"))
             setPadding(48, 24, 48, 24)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -1050,7 +1057,6 @@ class MainActivity : AppCompatActivity() {
                                 ContextCompat.getDrawable(this@MainActivity, R.drawable.ic_parking) // Hoặc giữ ic_menu_mylocation
                             }
                         }
-                        // ------------------------------
 
                         setOnMarkerClickListener { _, _ ->
                             showParkingDetails(parking)
@@ -1086,15 +1092,13 @@ class MainActivity : AppCompatActivity() {
 
         // 2. Cập nhật trạng thái chỗ sạc/đỗ và Live Occupancy
         if (parking.hasChargingStation) {
-            // Tính số khung giờ đã được đặt
-            val bookedTimeSlots = parking.totalChargingSpots * 12 - parking.realAvailableTimeSlots
-            tvPlaceRating.text = "⚡ Còn ${parking.realAvailableTimeSlots}/${parking.totalChargingSpots * 12} khung giờ trống"
+            val totalTimeSlots = parking.totalChargingSpots * 12
+            val bookedTimeSlots = totalTimeSlots - parking.realAvailableTimeSlots
+            tvPlaceRating.text = "⚡ Còn ${parking.realAvailableTimeSlots}/$totalTimeSlots khung giờ trống"
             tvPlaceRating.setTextColor(android.graphics.Color.parseColor("#4CAF50"))
             tvPlaceCategory.text = "Trạm sạc xe điện"
-
-            // Hiển thị số khung giờ đã đặt
             (tvLiveOccupancy.parent as? View)?.visibility = View.VISIBLE
-            tvLiveOccupancy.text = "Đã đặt $bookedTimeSlots/${parking.totalChargingSpots * 12} khung giờ"
+            tvLiveOccupancy.text = "Đã đặt $bookedTimeSlots/$totalTimeSlots khung giờ"
         }
 
         // 3. XỬ LÝ KHOẢNG CÁCH (PHẦN QUAN TRỌNG NHẤT)
@@ -1264,8 +1268,8 @@ class MainActivity : AppCompatActivity() {
                             stationId     = parking.id,
                             slotId        = slot.id,
                             status        = "Quick_Booking",
-                            //scheduledHour = selectedHour,
-                            scheduledHour = -1
+                            scheduledHour = selectedHour,
+                            //scheduledHour = -1
                         )
 
                         if (response.isSuccessful) {
@@ -1275,6 +1279,8 @@ class MainActivity : AppCompatActivity() {
                             loadChargingStationsFromDB()
 
                             runOnUiThread {
+                                btnBookParking.visibility = View.GONE
+                                btnBookParkingLater.visibility = View.GONE
                                 bottomSheetBehavior.isHideable = false
                                 bottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
 
@@ -1344,7 +1350,7 @@ class MainActivity : AppCompatActivity() {
                 rvTime.adapter = TimeSlotAdapter(timeSlots) { chosen ->
                     selectedHour = chosen.hour
                     btnConfirm.visibility = View.VISIBLE
-                    btnConfirm.text = "⚡ ĐẶT NGAY ô ${slot.slot_code}: ${chosen.label}"
+                    btnConfirm.text = "ĐẶT NGAY ô ${slot.slot_code}: ${chosen.label}"
                 }
             }
         }
@@ -1431,18 +1437,27 @@ class MainActivity : AppCompatActivity() {
             bottomSheetLayout.removeView(it)
         }
 
-        // Tạo nút "Tôi đã đến - Thanh toán"
         val btnArrived = Button(this).apply {
             tag = "btn_pay_now"
-            text = "📍 Tôi đã đến trạm - Thanh toán ngay"
-            textSize = 14f
+            text = "Thanh toán ngay"
+            textSize = 15f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(Color.WHITE)
-            setBackgroundColor(Color.parseColor("#2E7D32"))
-            setPadding(48, 24, 48, 24)
+            // Gradient tím giống nút đặt ngay/đặt trước
+            background = ContextCompat.getDrawable(this@MainActivity, R.drawable.gradient_green_bg)
+            // Bo góc 28dp + elevation giống 2 nút kia
+            elevation = 4f * resources.displayMetrics.density
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(32, 16, 32, 8) }
+                (56 * resources.displayMetrics.density).toInt()
+            ).apply {
+                setMargins(
+                    (16 * resources.displayMetrics.density).toInt(),
+                    (8 * resources.displayMetrics.density).toInt(),
+                    (16 * resources.displayMetrics.density).toInt(),
+                    (8 * resources.displayMetrics.density).toInt()
+                )
+            }
         }
         bottomSheetLayout.addView(btnArrived)
 
@@ -1462,8 +1477,9 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onFinish() {
-                // Hết thời gian di chuyển → hủy chỗ
-                tvPlaceRating.text = "⛔ Hết thời gian di chuyển"
+                btnBookParking.visibility = View.VISIBLE
+                btnBookParkingLater.visibility = View.VISIBLE
+                tvPlaceRating.text = "Hết thời gian di chuyển"
                 tvPlaceRating.setTextColor(Color.RED)
 
                 bottomSheetLayout.findViewWithTag<Button>("btn_pay_now")?.let {
@@ -2164,9 +2180,11 @@ class MainActivity : AppCompatActivity() {
                 dialog.dismiss()
 
                 if (response.isSuccessful) {
+                    btnBookParking.visibility = View.VISIBLE
+                    btnBookParkingLater.visibility = View.VISIBLE
                     Toast.makeText(
                         this@MainActivity,
-                        "✅ Xác nhận thành công! Chỗ sạc đã được giữ.",
+                        "Xác nhận thành công! Chỗ sạc đã được giữ.",
                         Toast.LENGTH_LONG
                     ).show()
                     
@@ -2281,7 +2299,6 @@ class MainActivity : AppCompatActivity() {
         checkPaymentHandler.post(checkRunnable)
     }
 
-    // ✅ Gọi confirm_payment/ để trừ slot, sau đó cập nhật UI
     private fun subtractSlotFromServer(
     bookingId: Int,
     dialog: androidx.appcompat.app.AlertDialog
@@ -2297,7 +2314,7 @@ class MainActivity : AppCompatActivity() {
                     if (response.isSuccessful) {
                         Toast.makeText(
                             this@MainActivity,
-                            "✅ Thanh toán thành công! Đã trừ 1 chỗ sạc.",
+                            "Thanh toán thành công! Đã trừ 1 chỗ sạc.",
                             Toast.LENGTH_LONG
                         ).show()
 
@@ -2338,6 +2355,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        Handler(Looper.getMainLooper()).postDelayed({
+            loadChargingStationsFromDB()
+        }, 500)
     }
 
     private fun stopAutoCheckPayment() {
@@ -2714,7 +2734,7 @@ class MainActivity : AppCompatActivity() {
 
                                 // Hiển thị thêm thời gian dự kiến vào phần category hoặc một TextView khác
                                 val timeText = formatDuration(durationInSeconds)
-                                tvPlaceCategory.text = "Dự kiến di chuyển: $timeText"
+                                tvPlaceCategory.text = "$timeText"
                             }
                         }
                     }
