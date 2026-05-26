@@ -78,6 +78,30 @@ interface ApiService {
         @Body request: CreateBookingRequest
     ): Response<BookingResponse>
 
+    @GET("api/bookings/stats/")
+    suspend fun getUserBookingStats(
+        @Query("user_id") userId: String
+    ): Response<BookingStats>
+
+    @GET("api/bookings/")
+    suspend fun getUserBookings(
+        @Query("user_id") userId: String
+    ): Response<List<BookingHistoryItem>>
+    data class BookingHistoryItem(
+        val id: Int,
+        val status: String,
+        val station_name: String?,   // ← cần Django trả về
+        val slot_code: String?,      // ← cần Django trả về
+        val scheduled_hour: Int?,
+        val booking_time: String?
+    )
+
+    data class BookingStats(
+        val total: Int,
+        val completed: Int,
+        val cancelled: Int
+    )
+
     data class CreateBookingRequest(
         val user_id: String,
         val station: Int,

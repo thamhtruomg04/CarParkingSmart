@@ -84,15 +84,23 @@
                 android:src="@android:drawable/ic_btn_speak_now"
                 app:tint="#FFFFFF" />
 
-            <ImageView
-                android:id="@+id/user_avatar"
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="36dp"
                 android:layout_height="36dp"
                 android:layout_marginStart="4dp"
                 android:layout_marginEnd="8dp"
-                android:background="@drawable/circle_button"
-                android:contentDescription="User Avatar"
-                android:src="@drawable/ic_electric_car" />
+                app:cardCornerRadius="18dp"
+                app:cardElevation="2dp"
+                app:strokeColor="#FFFFFF"
+                app:strokeWidth="1.5dp">
+                <ImageView
+                    android:id="@+id/user_avatar"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="centerCrop"
+                    android:contentDescription="User Avatar"
+                    android:src="@android:drawable/ic_menu_myplaces" />
+            </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
@@ -182,7 +190,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_menu_recent_history"
+                android:src="@drawable/ic_day_night"
                 android:contentDescription="Đổi giao diện"
                 app:tint="#4CAF50" />
         </com.google.android.material.card.MaterialCardView>

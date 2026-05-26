@@ -246,6 +246,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+    private val VOICE_SEARCH_REQUEST_CODE = 101
 
     private var navigationEngine: NavigationEngine? = null
     private var fusedLocationClient: FusedLocationProviderClient? = null
@@ -500,7 +501,7 @@ class MainActivity : AppCompatActivity() {
 
         val userAvatar = findViewById<ImageView>(R.id.user_avatar)
         userAvatar.setOnClickListener {
-            showLogoutConfirmation() //
+            showUserProfileDialog()
         }
     }
 
@@ -779,30 +780,41 @@ class MainActivity : AppCompatActivity() {
 
                                 for (j in 0 until steps.length()) {
                                     val step = steps.getJSONObject(j)
-                                    val maneuverObj = step.getJSONObject("maneuver")  // ← Lấy JSONObject maneuver
+                                    val maneuverObj = step.getJSONObject("maneuver")
 
                                     val instruction = step.getString("name").takeIf { it.isNotEmpty() }
-                                        ?: maneuverObj.getString("type")  // ← Lấy type từ maneuverObj
+                                        ?: maneuverObj.getString("type")
 
                                     val stepDistance = step.getDouble("distance")
                                     val stepDuration = step.getDouble("duration")
                                     val maneuverType = maneuverObj.getString("type")
 
-                                    // Lấy tọa độ của step
                                     val startPoint = maneuverObj.getJSONArray("location")
                                     val stepStartLat = startPoint.getDouble(1)
                                     val stepStartLon = startPoint.getDouble(0)
 
-                                    stepsList.add(DirectionStep(
-                                        instruction = buildStepInstruction(maneuverType, instruction),
+                                    val stepGeom = step.optString("geometry", "")
+                                    val stepPoints = if (stepGeom.isNotEmpty()) decodePolyline(stepGeom) else emptyList()
+                                    val stepEndLat = stepPoints.lastOrNull()?.latitude ?: stepStartLat
+                                    val stepEndLon = stepPoints.lastOrNull()?.longitude ?: stepStartLon
+
+                                    val bearingAfter = maneuverObj.optDouble("bearing_after", -1.0)
+
+                                    val tempStep = DirectionStep(
+                                        instruction = "",
                                         distance    = formatDistance(stepDistance),
                                         duration    = formatDuration(stepDuration),
                                         maneuver    = maneuverType,
                                         roadName    = instruction,
                                         startLat    = stepStartLat,
                                         startLon    = stepStartLon,
-                                        endLat      = stepStartLat,
-                                        endLon      = stepStartLon
+                                        endLat      = stepEndLat,
+                                        endLon      = stepEndLon,
+                                        bearingDegrees = bearingAfter
+                                    )
+
+                                    stepsList.add(tempStep.copy(
+                                        instruction = buildStepInstruction(maneuverType, instruction, tempStep)
                                     ))
                                 }
                             }
@@ -882,7 +894,7 @@ class MainActivity : AppCompatActivity() {
                 if (index + 1 < steps.size) {
                     showNextNavigationStep(steps, index + 1)
                 } else {
-                    Toast.makeText(this, "✅ Đã đến nơi!", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "Đã đến nơi!", Toast.LENGTH_LONG).show()
                 }
             }
             .setNegativeButton("Đóng") { _, _ -> }
@@ -1723,6 +1735,45 @@ class MainActivity : AppCompatActivity() {
         map.overlays.add(myLocationOverlay)
     }
 
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == VOICE_SEARCH_REQUEST_CODE && resultCode == android.app.Activity.RESULT_OK) {
+            val results = data?.getStringArrayListExtra(
+                android.speech.RecognizerIntent.EXTRA_RESULTS
+            )
+
+            val spokenText = results?.firstOrNull()?.trim()
+
+            if (!spokenText.isNullOrEmpty()) {
+                searchBox.setText(spokenText.toString())
+                searchLocation(spokenText.toString())
+                hideKeyboard()
+                Toast.makeText(this, "Đang tìm: \"$spokenText\"", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Không nhận ra giọng nói, hãy thử lại!", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    private fun startVoiceSearch() {
+        val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(
+                android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+            )
+            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "vi-VN")
+            putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Nói tên trạm sạc cần tìm...")
+            putExtra(android.speech.RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+        }
+
+        try {
+            startActivityForResult(intent, VOICE_SEARCH_REQUEST_CODE)
+        } catch (e: android.content.ActivityNotFoundException) {
+            Toast.makeText(this, "Thiết bị không hỗ trợ nhận dạng giọng nói!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun setupButtons() {
         btnMyLocation.setOnClickListener { zoomToMyLocation(true) }
 
@@ -1731,22 +1782,135 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnVoice.setOnClickListener {
-            Toast.makeText(this, "Tính năng đang phát triển", Toast.LENGTH_SHORT).show()
+            startVoiceSearch()
+
         }
+
         btnDirections.setOnClickListener {
             showDetailedDirections()  // Gọi hàm chỉ đường chi tiết
         }
 
         val btnThemeToggle = findViewById<ImageButton>(R.id.btn_theme_toggle)
+
+// Cập nhật icon theo chế độ hiện tại ngay khi khởi động
+        btnThemeToggle.setImageResource(
+            if (isDarkMode()) R.drawable.ic_sun else R.drawable.ic_moon
+        )
+
         btnThemeToggle.setOnClickListener {
             if (isDarkMode()) {
-                // Chuyển sang Sáng
                 AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
-                // Lưu ý: Lệnh trên sẽ khởi động lại Activity, nên bạn không cần
-                // lo lắng về việc set lại màu bản đồ thủ công ở đây.
             } else {
-                // Chuyển sang Tối
                 AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+            }
+        }
+    }
+
+    private fun showUserProfileDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_user_profile, null)
+        val sharedPref = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
+        val userEmail = sharedPref.getString("user_email", "Chưa đăng nhập") ?: "Chưa đăng nhập"
+
+        // Hiển thị email
+        dialogView.findViewById<TextView>(R.id.tv_profile_email).text = userEmail
+
+        // Tải thống kê từ API
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.instance.getUserBookingStats(userEmail)
+                if (response.isSuccessful) {
+                    val stats = response.body()
+                    runOnUiThread {
+                        dialogView.findViewById<TextView>(R.id.tv_stat_total).text =
+                            "${stats?.total ?: 0}"
+                        dialogView.findViewById<TextView>(R.id.tv_stat_completed).text =
+                            "${stats?.completed ?: 0}"
+                        dialogView.findViewById<TextView>(R.id.tv_stat_cancelled).text =
+                            "${stats?.cancelled ?: 0}"
+                    }
+                }
+            } catch (e: Exception) {
+                // Nếu chưa có API stats, tính local từ bookingHistory
+                runOnUiThread {
+                    dialogView.findViewById<TextView>(R.id.tv_stat_total).text = "—"
+                    dialogView.findViewById<TextView>(R.id.tv_stat_completed).text = "—"
+                    dialogView.findViewById<TextView>(R.id.tv_stat_cancelled).text = "—"
+                }
+            }
+        }
+
+        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this)
+        dialog.setContentView(dialogView)
+
+        // Lịch sử đặt chỗ
+        dialogView.findViewById<LinearLayout>(R.id.btn_booking_history).setOnClickListener {
+            dialog.dismiss()
+            showBookingHistory(userEmail)
+        }
+
+        // Trạm yêu thích (tính năng tương lai)
+        dialogView.findViewById<LinearLayout>(R.id.btn_favorite_stations).setOnClickListener {
+            dialog.dismiss()
+            Toast.makeText(this, "Tính năng đang phát triển!", Toast.LENGTH_SHORT).show()
+        }
+
+        // Đăng xuất
+        dialogView.findViewById<LinearLayout>(R.id.btn_profile_logout).setOnClickListener {
+            dialog.dismiss()
+            showLogoutConfirmation()
+        }
+
+        dialog.show()
+    }
+
+    private fun showBookingHistory(userEmail: String) {
+
+        lifecycleScope.launch {
+            try {
+                showLoadingDialog("Đang tải lịch sử...")
+                val response = RetrofitClient.instance.getUserBookings(userEmail)
+                dismissLoadingDialog()
+
+                if (response.isSuccessful) {
+                    val bookings = response.body() ?: emptyList()
+                    runOnUiThread {
+                        if (bookings.isEmpty()) {
+                            androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                                .setTitle("Lịch sử đặt chỗ")
+                                .setMessage("Bạn chưa có lần đặt chỗ nào.")
+                                .setPositiveButton("Đóng", null)
+                                .show()
+                            return@runOnUiThread
+                        }
+
+                        val historyText = bookings.take(10).joinToString("\n\n") { booking ->
+                            val statusIcon = when (booking.status) {
+                                "Confirmed" -> "✅"
+                                "Cancelled" -> "❌"
+                                "Completed" -> "🏁"
+                                else -> "⏳"
+                            }
+                            "$statusIcon ${booking.station_name ?: "Trạm sạc"}\n" +
+                                    "   Ô: ${booking.slot_code ?: "—"} | Giờ: ${
+                                        if ((booking.scheduled_hour ?: -1) >= 0)
+                                            "${booking.scheduled_hour}:00–${(booking.scheduled_hour ?: 0) + 2}:00"
+                                        else "—"
+                                    }\n" +
+                                    "   ${booking.booking_time?.take(16)?.replace("T", " ") ?: ""}"
+                        }
+
+                        androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                            .setTitle("📋 Lịch sử đặt chỗ (10 gần nhất)")
+                            .setMessage(historyText)
+                            .setPositiveButton("Đóng", null)
+                            .show()
+                    }
+                }
+            } catch (e: Exception) {
+                dismissLoadingDialog()
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "Lỗi tải lịch sử: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -2558,21 +2722,30 @@ class MainActivity : AppCompatActivity() {
         return if (totalMeters >= 1000) "%.1f km".format(totalMeters/1000) else "${totalMeters.toInt()} m"
     }
 
-    private fun buildStepInstruction(maneuverType: String, roadName: String): String {
-        val road = roadName.ifEmpty { "đường phía trước" }
+
+    private fun buildStepInstruction(
+        maneuverType: String,
+        roadName: String,
+        step: DirectionStep          // ← THÊM tham số
+    ): String {
+        // Nếu có tên đường → dùng tên đường như cũ
+        // Nếu không → dùng hướng la bàn
+        val destination = if (roadName.isNotEmpty()) roadName
+        else step.compassDirection()   // ← thay "đường phía trước"
+
         return when {
-            maneuverType == "depart"                                  -> "Xuất phát trên $road"
-            maneuverType == "arrive"                                  -> "Đã đến đích"
-            maneuverType.contains("left") && maneuverType.contains("sharp")  -> "Rẽ gấp trái vào $road"
-            maneuverType.contains("left") && maneuverType.contains("slight") -> "Đi chếch trái vào $road"
-            maneuverType.contains("left")                             -> "Rẽ trái vào $road"
-            maneuverType.contains("right") && maneuverType.contains("sharp") -> "Rẽ gấp phải vào $road"
-            maneuverType.contains("right") && maneuverType.contains("slight")-> "Đi chếch phải vào $road"
-            maneuverType.contains("right")                            -> "Rẽ phải vào $road"
-            maneuverType.contains("u-turn")                           -> "Quay đầu xe"
-            maneuverType.contains("roundabout")                       -> "Đi vào vòng xuyến, rẽ ra tại $road"
-            maneuverType.contains("merge")                            -> "Nhập làn vào $road"
-            else                                                      -> "Đi thẳng trên $road"
+            maneuverType == "depart"                                          -> "Xuất phát theo $destination"
+            maneuverType == "arrive"                                          -> "Đã đến đích"
+            maneuverType.contains("left") && maneuverType.contains("sharp")  -> "Rẽ gấp trái theo $destination"
+            maneuverType.contains("left") && maneuverType.contains("slight") -> "Đi chếch trái theo $destination"
+            maneuverType.contains("left")                                     -> "Rẽ trái theo $destination"
+            maneuverType.contains("right") && maneuverType.contains("sharp") -> "Rẽ gấp phải theo $destination"
+            maneuverType.contains("right") && maneuverType.contains("slight")-> "Đi chếch phải theo $destination"
+            maneuverType.contains("right")                                    -> "Rẽ phải theo $destination"
+            maneuverType.contains("u-turn")                                   -> "Quay đầu xe"
+            maneuverType.contains("roundabout")                               -> "Vào vòng xuyến, ra theo $destination"
+            maneuverType.contains("merge")                                    -> "Nhập làn theo $destination"
+            else                                                              -> "Đi thẳng theo $destination"
         }
     }
 
